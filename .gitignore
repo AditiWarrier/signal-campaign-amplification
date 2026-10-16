@@ -31,7 +31,17 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
+secrets/
+credentials/
+supabase/.temp/
+*.credentials
+*.credentials.*
+*service-account*.json
+*.keystore
 
 # typescript
 *.tsbuildinfo
