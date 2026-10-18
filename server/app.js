@@ -6,6 +6,7 @@ const CATEGORIES = new Set(['Environment', 'Education', 'Community', 'Human Righ
 const CHANNELS = new Set(['instagram', 'facebook']);
 const REVIEW_STATUSES = new Set(['under_review', 'approved', 'rejected']);
 const MAX_JSON_BYTES = '1mb';
+const AUTH_DIAGNOSTIC_CONTRACT = 'auth-diagnostics-v1';
 
 function apiError(status, code, message) {
   const error = new Error(message);
@@ -174,16 +175,24 @@ function createApp({ store, campaigns, auth, authMiddleware, authService } = {})
 
   app.disable('x-powered-by');
   app.use((req, res, next) => {
+    // Lets clients distinguish this auth contract from stale SIGNAL API
+    // processes that return an unclassified INVALID_SESSION response.
+    res.setHeader('X-SIGNAL-API-Contract', AUTH_DIAGNOSTIC_CONTRACT);
     const allowedOrigin = process.env.SIGNAL_CORS_ORIGIN || '*';
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Expose-Headers', 'Retry-After');
+    res.setHeader('Access-Control-Expose-Headers', 'Retry-After, X-SIGNAL-API-Contract');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     return next();
   });
   app.use(express.json({ limit: MAX_JSON_BYTES, strict: true }));
-  app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'signal-api', persistence: campaigns ? 'supabase' : 'backend-file' }));
+  app.get('/api/health', (_req, res) => res.json({
+    ok: true,
+    service: 'signal-api',
+    contract: AUTH_DIAGNOSTIC_CONTRACT,
+    persistence: campaigns ? (campaigns.configured ? 'supabase' : 'unconfigured') : 'backend-file',
+  }));
 
   app.post('/api/auth/signup', async (req, res) => {
     const invalid = validateCredentials(req.body, true);
@@ -506,4 +515,4 @@ function createApp({ store, campaigns, auth, authMiddleware, authService } = {})
   return app;
 }
 
-module.exports = { createApp, validateCampaignInput, validateDemoContribution, apiError };
+module.exports = { createApp, validateCampaignInput, validateDemoContribution, apiError, AUTH_DIAGNOSTIC_CONTRACT };

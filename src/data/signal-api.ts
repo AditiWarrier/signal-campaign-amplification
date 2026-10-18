@@ -15,6 +15,8 @@ export type SignalActivityEvent = {
   createdAt: string;
 };
 
+const AUTH_DIAGNOSTIC_CONTRACT = 'auth-diagnostics-v1';
+
 export class SignalApiError extends Error {
   readonly status: number;
   readonly code: string | null;
@@ -108,6 +110,14 @@ export async function getSignalActivity(accessToken: string): Promise<SignalActi
     const code = typeof result?.error?.code === 'string' ? result.error.code : null;
     const providerMessage = typeof result?.error?.message === 'string' ? result.error.message : '';
     const diagnostic = typeof result?.error?.diagnostic === 'string' ? result.error.diagnostic : null;
+    const contract = response.headers?.get('X-SIGNAL-API-Contract') ?? null;
+    if (response.status === 401 && code === 'INVALID_SESSION' && !diagnostic && contract !== AUTH_DIAGNOSTIC_CONTRACT) {
+      throw new SignalApiError(
+        502,
+        'BACKEND_AUTH_CONTRACT_MISMATCH',
+        'The configured SIGNAL API is running an older or different backend. Restart it from this project with node server/index.js.',
+      );
+    }
     const detail = [code, providerMessage, diagnostic ? `diagnostic: ${diagnostic}` : null].filter(Boolean).join(': ');
     throw new SignalApiError(
       response.status,

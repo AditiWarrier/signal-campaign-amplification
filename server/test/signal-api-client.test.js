@@ -128,3 +128,36 @@ test('Activity retries once with the refreshed access token after a 401', async 
   assert.equal(requests[0].options.headers.Authorization, 'Bearer expired-access-token');
   assert.equal(requests[1].options.headers.Authorization, 'Bearer rotated-access-token');
 });
+
+test('Activity identifies an unclassified INVALID_SESSION from a stale or different backend without refreshing credentials', async (t) => {
+  const oldUrl = process.env.EXPO_PUBLIC_SIGNAL_API_URL;
+  const oldFetch = global.fetch;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.EXPO_PUBLIC_SIGNAL_API_URL;
+    else process.env.EXPO_PUBLIC_SIGNAL_API_URL = oldUrl;
+    global.fetch = oldFetch;
+  });
+  process.env.EXPO_PUBLIC_SIGNAL_API_URL = 'http://signal-api.test';
+  let calls = 0;
+  global.fetch = async () => {
+    calls += 1;
+    return {
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({ error: { code: 'INVALID_SESSION', message: 'Your session is invalid or expired. Sign in again.' } }),
+    };
+  };
+  const { getSignalActivityWithRefresh } = loadSignalApi();
+  let refreshCalls = 0;
+  await assert.rejects(
+    getSignalActivityWithRefresh('opaque-test-token', async () => { refreshCalls += 1; return 'refreshed-test-token'; }),
+    (error) => {
+      assert.equal(error.code, 'BACKEND_AUTH_CONTRACT_MISMATCH');
+      assert.match(error.message, /older or different backend/);
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+  assert.equal(refreshCalls, 0);
+});

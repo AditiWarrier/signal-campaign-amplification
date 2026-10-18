@@ -96,6 +96,59 @@ test('auth middleware preserves Supabase Auth rate limits and Retry-After', asyn
   assert.equal(retryAfter, '23');
 });
 
+test('invalid sessions always return a safe diagnostic, including in production mode', async (t) => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  t.after(() => {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  });
+  const auth = createSupabaseAuth({ url: 'https://signal-test.supabase.co', publishableKey: 'test-key' });
+  const middleware = createAuthMiddleware(auth);
+  const claims = { iss: 'https://signal-test.supabase.co/auth/v1', exp: 1 };
+  const token = `e30.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+  let status;
+  let body;
+  const response = { status(value) { status = value; return this; }, json(value) { body = value; return this; } };
+  await middleware({ get: () => `Bearer ${token}` }, response, () => assert.fail('expired token must not authenticate'));
+  assert.equal(status, 401);
+  assert.deepEqual(body.error, {
+    code: 'INVALID_SESSION',
+    message: 'Your session is invalid or expired. Sign in again.',
+    diagnostic: 'expired_token',
+  });
+  assert.doesNotMatch(JSON.stringify(body), new RegExp(token));
+});
+
+test('Supabase Auth rejection becomes a classified INVALID_SESSION without exposing the bearer token', async () => {
+  const token = `e30.${Buffer.from(JSON.stringify({
+    iss: 'https://signal-test.supabase.co/auth/v1',
+    exp: Math.floor(Date.now() / 1000) + 300,
+  })).toString('base64url')}.test-signature`;
+  const auth = createSupabaseAuth({
+    url: 'https://signal-test.supabase.co',
+    publishableKey: 'test-key',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      json: async () => ({ msg: 'Invalid JWT', error_code: 'invalid_jwt' }),
+    }),
+  });
+  const middleware = createAuthMiddleware(auth);
+  let status;
+  let body;
+  const response = { status(value) { status = value; return this; }, json(value) { body = value; return this; } };
+  await middleware({ get: () => `Bearer ${token}` }, response, () => assert.fail('Supabase-rejected token must not authenticate'));
+  assert.equal(status, 401);
+  assert.deepEqual(body.error, {
+    code: 'INVALID_SESSION',
+    message: 'Your session is invalid or expired. Sign in again.',
+    diagnostic: 'verification_failure',
+  });
+  assert.doesNotMatch(JSON.stringify(body), new RegExp(token));
+});
+
 async function withApi(t, store = new MemoryStore(), campaigns) {
   const auth = {
     async verifyAccessToken(token) {
@@ -117,7 +170,7 @@ async function withApi(t, store = new MemoryStore(), campaigns) {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const data = response.status === 204 ? null : await response.json();
-    return { status: response.status, data };
+    return { status: response.status, headers: response.headers, data };
   };
   return { request };
 }
@@ -199,7 +252,9 @@ test('an unconfirmed Supabase submission response cannot be reported as successf
 
 test('health and Supabase auth proxy routes validate requests', async (t) => {
   const { request } = await withApi(t);
-  assert.deepEqual((await request('/api/health')).data, { ok: true, service: 'signal-api', persistence: 'backend-file' });
+  const health = await request('/api/health');
+  assert.deepEqual(health.data, { ok: true, service: 'signal-api', contract: 'auth-diagnostics-v1', persistence: 'backend-file' });
+  assert.equal(health.headers.get('X-SIGNAL-API-Contract'), 'auth-diagnostics-v1');
   assert.equal((await request('/api/auth/me')).status, 401);
   assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'bad', password: 'short' } })).status, 400);
   const login = await request('/api/auth/login', { method: 'POST', body: { email: 'creator@example.test', password: 'pass12345' } });
@@ -210,6 +265,9 @@ test('health and Supabase auth proxy routes validate requests', async (t) => {
   const me = await request('/api/auth/me', { token: 'creator_token' });
   assert.equal(me.data.user.id, creator.id);
   assert.equal(me.data.user.role, 'user'); // user_metadata role is not trusted
+  const activity = await request('/api/activity', { token: 'creator_token' });
+  assert.equal(activity.status, 200);
+  assert.equal(activity.headers.get('X-SIGNAL-API-Contract'), 'auth-diagnostics-v1');
 });
 
 test('campaigns and drafts validate, persist, and enforce owner checks', async (t) => {
