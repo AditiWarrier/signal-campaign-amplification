@@ -5,19 +5,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Palette as C } from '@/constants/theme';
-import { discoveryCampaigns, formatIsoDate, getDeadlineLabel, isDeadlineExpired, type IsoDate } from '@/data/campaigns';
-import { useUtcToday } from '@/hooks/use-utc-today';
+import { discoveryCampaigns, type IsoDate } from '@/data/campaigns';
 import { useWebScrollDiagnostics } from '@/hooks/use-web-scroll-diagnostics';
-import { readCampaignDemoContributions } from '@/data/demo-contributions';
 import { formatUsdMinor } from '@/data/funding';
 import { getSignalActivityWithRefresh, isSignalApiConfigured, syncCampaignSubmissionToApi, type SignalActivityEvent } from '@/data/signal-api';
 import { mergeAccountEvents, readLocalActivityEvents, type LocalActivityEvent } from '@/data/local-activity';
 import { readCampaignDraft, readCampaignSubmission, readCampaignSubmissions, writeCampaignDraft, writeCampaignSubmission } from '@/data/campaign-draft-storage';
 import { useAuth } from '@/auth/auth-context';
-import type { LocalDemoContribution } from '@/types/local-campaign';
 
 type ActivityFilter = 'All' | 'Campaign Updates' | 'Contributions & funding';
-type ActivityKind = 'created' | 'milestone' | 'deadline' | 'ended' | 'simulated-status' | 'demo-contribution' | 'account-status' | 'account-contribution';
+type ActivityKind = 'account-status' | 'account-contribution';
 
 type ActivityEvent = {
   id: string;
@@ -28,7 +25,7 @@ type ActivityEvent = {
   campaignTitle?: string;
   description: string;
   marker: string;
-  source: 'demo' | 'on-device' | 'recovered-device' | 'api';
+  source: 'on-device' | 'recovered-device' | 'api';
   localOwnerId?: string;
   eventType?: string;
   actionId?: string;
@@ -61,48 +58,18 @@ function isRateLimitError(error: unknown): boolean {
   return (isRequestFailure(error, 'SignalApiError') || isRequestFailure(error, 'AuthRequestError')) && error.status === 429;
 }
 
-// Fictional sample activity tied to campaign dates and existing demo campaign IDs.
-const events: ActivityEvent[] = [
-  { id: 'creekside-created', campaignId: 'creekside-native-plants', date: '2026-10-02', kind: 'created', title: 'Campaign submitted', description: 'A new fictional neighborhood creek restoration campaign was added to the demo feed.', marker: '＋', source: 'demo' },
-  { id: 'books-created', campaignId: 'open-books-after-school', date: '2026-09-29', kind: 'created', title: 'Campaign submitted', description: 'A fictional reading circle campaign was added to the demo feed.', marker: '＋', source: 'demo' },
-  { id: 'rights-created', campaignId: 'know-your-rights-workshop', date: '2026-09-15', kind: 'created', title: 'Campaign submitted', description: 'A fictional community rights workshop campaign was added to the demo feed.', marker: '＋', source: 'demo' },
-  { id: 'books-milestone', campaignId: 'open-books-after-school', date: '2026-10-05', kind: 'milestone', title: 'Sample funding milestone', description: 'This fictional campaign passed its first $1,000 demo-funding milestone. This is sample activity, not a recorded payment.', marker: '$', source: 'demo' },
-  { id: 'stories-created', campaignId: 'stories-from-main-street', date: '2026-10-08', kind: 'created', title: 'Campaign submitted', description: 'A fictional arts collective campaign was added to the demo feed.', marker: '＋', source: 'demo' },
-  { id: 'rights-ended', campaignId: 'know-your-rights-workshop', date: '2026-10-10', kind: 'ended', title: 'Funding period ended', description: 'The sample funding window has closed. Its activity figures are fictional demo data.', marker: '✓', source: 'demo' },
-  { id: 'neighbors-created', campaignId: 'neighbors-share-fresh-food', date: '2026-10-12', kind: 'created', title: 'Campaign submitted', description: 'A fictional neighborhood food-access campaign was added to the demo feed.', marker: '＋', source: 'demo' },
-  { id: 'creekside-status', campaignId: 'creekside-native-plants', date: '2026-10-14', kind: 'simulated-status', title: 'Simulated amplification status update', description: 'This campaign is marked ready for amplification in the demo. No live ads or distribution are running through SIGNAL.', marker: '↗', source: 'demo' },
-  { id: 'creekside-halfway', campaignId: 'creekside-native-plants', date: '2026-10-15', kind: 'milestone', title: 'Sample funding passed halfway', description: 'The fictional demo total is over half of its sample goal. This is not a real transaction or payment record.', marker: '◎', source: 'demo' },
-  { id: 'books-deadline', campaignId: 'open-books-after-school', date: '2026-10-16', kind: 'deadline', title: 'Funding deadline approaching', description: 'The fictional campaign deadline is coming up. Check the campaign page for its current demo deadline.', marker: '◷', source: 'demo' },
-];
-
 function formatEventDate(date: IsoDate): string {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function eventDescription(event: ActivityEvent, campaign: (typeof discoveryCampaigns)[number], today: IsoDate): string {
-  if (event.kind === 'milestone') {
-    return `${event.description} Demo total: $${campaign.raised.toLocaleString()} of $${campaign.goal.toLocaleString()} goal.`;
-  }
-  if (event.kind === 'deadline') {
-    return `${campaign.title} is a fictional demo campaign. ${getDeadlineLabel(campaign.fundingDeadline, today)} (${formatIsoDate(campaign.fundingDeadline)}).`;
-  }
-  if (event.kind === 'ended') {
-    const label = isDeadlineExpired(campaign.fundingDeadline, today) ? 'Funding period ended' : 'The sample funding window has closed';
-    return `${label} on ${formatIsoDate(campaign.fundingDeadline)}. Its activity figures are fictional demo data.`;
-  }
-  return event.description;
 }
 
 export default function ActivityScreen() {
   const { session, isLoading: authLoading, refreshAccessToken } = useAuth();
   const authRef = useRef({ session, authLoading, refreshAccessToken });
   authRef.current = { session, authLoading, refreshAccessToken };
-  const today = useUtcToday();
   const scrollRef = useRef<ScrollView>(null);
   useWebScrollDiagnostics(scrollRef, 'activity');
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>('All');
-  const [demoContributionEvents, setDemoContributionEvents] = useState<ActivityEvent[]>([]);
   const [localAccountEvents, setLocalAccountEvents] = useState<ActivityEvent[]>([]);
   const [accountEvents, setAccountEvents] = useState<ActivityEvent[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
@@ -193,10 +160,6 @@ export default function ActivityScreen() {
       setApiRequestSucceeded(false);
       setApiStatus(currentSession ? 'SIGNAL API URL is not configured. Saved device activity remains available.' : 'Sign in to load private API activity.');
     }
-    void Promise.all(discoveryCampaigns.map((campaign) => readCampaignDemoContributions(campaign.id)
-      .then((records) => records.map((record) => toContributionEvent(record, campaign.title)))
-      .catch(() => [] as ActivityEvent[])))
-      .then((groups) => { if (active) setDemoContributionEvents(groups.flat()); });
     return () => {
       active = false;
       if (typeof window !== 'undefined') {
@@ -268,11 +231,11 @@ export default function ActivityScreen() {
     }
   }
 
-  const allEvents = useMemo(() => [...mergeAccountEvents(localAccountEvents, accountEvents), ...events, ...demoContributionEvents], [accountEvents, demoContributionEvents, localAccountEvents]);
+  const allEvents = useMemo(() => mergeAccountEvents(localAccountEvents, accountEvents), [accountEvents, localAccountEvents]);
 
   const visibleEvents = useMemo(() => allEvents
     .filter((event) => selectedFilter === 'All'
-      || (selectedFilter === 'Contributions & funding' ? event.kind === 'milestone' || event.kind === 'demo-contribution' || event.kind === 'account-contribution' : event.kind !== 'milestone' && event.kind !== 'demo-contribution' && event.kind !== 'account-contribution'))
+      || (selectedFilter === 'Contributions & funding' ? event.kind === 'account-contribution' : event.kind !== 'account-contribution'))
     .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id)), [allEvents, selectedFilter]);
 
   const campaignsById = useMemo(() => new Map(discoveryCampaigns.map((campaign) => [campaign.id, campaign])), []);
@@ -284,14 +247,14 @@ export default function ActivityScreen() {
         <Text style={styles.intro}>Follow the progress of campaigns and the messages they aim to amplify.</Text>
 
         <View style={styles.demoNote}>
-          <Text style={styles.demoNoteText}>{session ? 'Account events are loaded from this device and the SIGNAL API when available. Fictional sample activity is labeled Demo.' : 'Saved activity on this device is labeled On this device. Fictional sample activity is labeled Demo. Sign in to load private API activity.'}</Text>
+          <Text style={styles.demoNoteText}>{session ? 'Account events are loaded from this device and the SIGNAL API when available.' : 'Saved activity on this device is labeled On this device. Sign in to load private API activity.'}</Text>
         </View>
         {apiStatus || pendingSyncCount > 0 ? <View style={styles.syncStatus}><Text style={styles.syncStatusText}>{apiStatus || `${pendingSyncCount} saved ${pendingSyncCount === 1 ? 'campaign is' : 'campaigns are'} waiting to sync.`}</Text>{session && isSignalApiConfigured() && <Pressable disabled={loading || retryAfterSeconds > 0} onPress={() => void retryApiAndPendingSubmissions()} accessibilityRole="button" accessibilityState={{ disabled: loading || retryAfterSeconds > 0 }}><Text style={styles.retryText}>{retryAfterSeconds > 0 ? `Retry in ${retryAfterSeconds}s` : loading ? 'Syncing…' : 'Retry sync'}</Text></Pressable>}</View> : null}
         {loading ? <Text style={styles.loadingText}>Loading account activity…</Text> : null}
         {localLoading ? <Text style={styles.loadingText}>Loading saved on-device activity…</Text> : null}
         {localError ? <View style={styles.errorState}><Text style={styles.errorText}>{localError}</Text></View> : null}
         {!localLoading && !loading && !localError && apiRequestSucceeded && localAccountEvents.length === 0 && accountEvents.length === 0
-          ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>No account activity yet</Text><Text style={styles.emptyDescription}>The Demo events below are fictional examples. Submit a campaign to add activity from this device.</Text></View>
+          ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>No account activity yet</Text><Text style={styles.emptyDescription}>Submit a campaign to add activity to this account.</Text></View>
           : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterList}>
           {filters.map((filter) => {
@@ -315,7 +278,7 @@ export default function ActivityScreen() {
           <Text style={styles.count}>{visibleEvents.length} {visibleEvents.length === 1 ? 'update' : 'updates'}</Text>
         </View>
 
-        {visibleEvents.length === 0 ? (
+        {visibleEvents.length === 0 && !(apiRequestSucceeded && localAccountEvents.length === 0 && accountEvents.length === 0) ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No activity yet</Text>
             <Text style={styles.emptyDescription}>There are no items in this activity view right now.</Text>
@@ -338,7 +301,7 @@ export default function ActivityScreen() {
                   style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}
                 >
                   <View style={styles.markerColumn}>
-                    <View style={[styles.marker, (event.kind === 'milestone' || event.kind === 'demo-contribution') && styles.fundingMarker, event.kind === 'simulated-status' && styles.statusMarker]}>
+                    <View style={[styles.marker, event.kind === 'account-contribution' && styles.fundingMarker]}>
                       <Text style={styles.markerText}>{event.marker}</Text>
                     </View>
                     {index < visibleEvents.length - 1 && <View style={styles.timelineLine} />}
@@ -349,8 +312,8 @@ export default function ActivityScreen() {
                       <Text style={styles.eventDate}>{formatEventDate(event.date)}</Text>
                     </View>
                     {event.campaignId ? <Text style={styles.campaignName}>{campaignTitle}{campaignCategory ? ` · ${campaignCategory}` : ''}</Text> : null}
-                    <Text style={styles.eventDescription}>{campaign ? eventDescription(event, campaign, today) : event.description}</Text>
-                    <Text style={styles.sourceLabel}>{event.source === 'api' ? 'SIGNAL API' : event.source === 'recovered-device' ? 'Recovered from this device' : event.source === 'on-device' ? 'On this device' : 'Demo'}</Text>
+                    <Text style={styles.eventDescription}>{event.description}</Text>
+                    <Text style={styles.sourceLabel}>{event.source === 'api' ? 'SIGNAL API' : event.source === 'recovered-device' ? 'Recovered from this device' : 'On this device'}</Text>
                     {event.campaignId ? <Text style={styles.openLink}>View campaign →</Text> : null}
                   </View>
                 </Pressable>
@@ -361,22 +324,6 @@ export default function ActivityScreen() {
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function toContributionEvent(record: LocalDemoContribution, title: string): ActivityEvent {
-  const parsedDate = new Date(record.createdAt);
-  const date = Number.isNaN(parsedDate.getTime()) ? new Date().toISOString().slice(0, 10) as IsoDate : parsedDate.toISOString().slice(0, 10) as IsoDate;
-  return {
-    id: record.id,
-    campaignId: record.campaignId,
-    date,
-    kind: 'demo-contribution',
-    title: 'Simulated demo contribution',
-    description: `${record.contributorName || 'Demo supporter'} recorded ${formatUsdMinor(record.amountMinor)} for “${title}”. This is a local simulation; no payment was made.`,
-    marker: '$',
-    source: 'demo',
-    eventType: 'demo.contribution',
-  };
 }
 
 function toLocalEvent(event: LocalActivityEvent, ownerId: string): ActivityEvent {

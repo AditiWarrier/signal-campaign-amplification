@@ -132,6 +132,33 @@ test('web localStorage Activity reads the submitted event and does not duplicate
   assert.equal(merged[0].source, 'api');
 });
 
+test('Activity feed excludes fictional demo sources and preserves the real library campaign API event', () => {
+  const activitySource = fs.readFileSync(path.join(__dirname, '../../src/app/(tabs)/activity.tsx'), 'utf8');
+  assert.doesNotMatch(activitySource, /readCampaignDemoContributions|demoContributionEvents|const events:\s*ActivityEvent\[\]/);
+  assert.doesNotMatch(activitySource, /source:\s*'demo'/);
+
+  const localEvent = {
+    id: 'local:campaign.submitted:library-campaign',
+    campaignId: 'library-campaign',
+    campaignTitle: 'Every Child Deserves a Library',
+    eventType: 'campaign.submitted',
+    source: 'on-device',
+    date: '2026-10-19',
+  };
+  const apiEvent = {
+    ...localEvent,
+    id: 'signal-api-event-123',
+    source: 'api',
+    description: 'Every Child Deserves a Library · campaign submitted.',
+  };
+  const feed = mergeAccountEvents([localEvent], [apiEvent]);
+
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].campaignTitle, 'Every Child Deserves a Library');
+  assert.equal(feed[0].source, 'api');
+  assert.deepEqual(mergeAccountEvents([], []), []);
+});
+
 test('web Create submission persists a campaign and Activity event across repeated reads and module reload', async () => {
   const values = new Map();
   const storage = {
