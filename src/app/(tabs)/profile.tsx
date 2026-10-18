@@ -1,22 +1,15 @@
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Palette as C } from '@/constants/theme';
 import { useWebScrollDiagnostics } from '@/hooks/use-web-scroll-diagnostics';
 import { useAuth } from '@/auth/auth-context';
-
-const C = {
-  paper: '#EEE8DF',
-  white: '#FFFEFA',
-  ink: '#302A25',
-  muted: '#776E65',
-  line: '#E8E1D7',
-  brown: '#74563F',
-  brownLight: '#EDE5DA',
-  green: '#536D58',
-};
+import { readCampaignSubmissions } from '@/data/campaign-draft-storage';
+import { isSignalApiConfigured, listSubmittedCampaignsFromApi } from '@/data/signal-api';
+import type { LocalCampaignIndexEntry } from '@/types/local-campaign';
 
 const settings = [
   { label: 'Edit Profile', symbol: { ios: 'person.crop.circle', android: 'account_circle', web: 'person' } },
@@ -40,13 +33,35 @@ function EmptyState({ title, description, action }: { title: string; description
 }
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const scrollRef = useRef<ScrollView>(null);
   const [signOutError, setSignOutError] = useState('');
   const [signingOut, setSigningOut] = useState(false);
+  const [localCampaigns, setLocalCampaigns] = useState<Array<LocalCampaignIndexEntry & { apiSubmissionStatus?: 'submitted' }>>([]);
   useWebScrollDiagnostics(scrollRef, 'profile');
   const displayName = user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email?.split('@')[0] ?? 'SIGNAL member';
   const initials = displayName.split(/\s+/).map((part) => part.charAt(0)).join('').slice(0, 2).toUpperCase();
+
+  const loadCampaigns = useCallback(async () => {
+    let local: LocalCampaignIndexEntry[] = [];
+    let remote: Awaited<ReturnType<typeof listSubmittedCampaignsFromApi>> = [];
+    if (user?.id) {
+      try { local = await readCampaignSubmissions(user.id); } catch { local = []; }
+      if (session?.access_token && isSignalApiConfigured()) {
+        try { remote = await listSubmittedCampaignsFromApi(session.access_token); } catch { /* Local submissions remain visible offline. */ }
+      }
+    }
+    const merged = new Map<string, LocalCampaignIndexEntry & { apiSubmissionStatus?: 'submitted' }>();
+    for (const item of local) merged.set(item.id, item);
+    for (const item of remote) merged.set(item.id, item);
+    setLocalCampaigns([...merged.values()].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)));
+  }, [session?.access_token, user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    void loadCampaigns().catch(() => { if (active) setLocalCampaigns([]); });
+    return () => { active = false; };
+  }, [loadCampaigns]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -73,9 +88,24 @@ export default function ProfileScreen() {
 
         <View style={styles.section}>
           <SectionHeading>My Campaigns</SectionHeading>
-          <EmptyState
+          {localCampaigns.length ? <View style={styles.localCampaignList}>
+            {localCampaigns.map((campaign) => <Pressable
+              key={campaign.id}
+              accessibilityRole="button"
+              accessibilityLabel={`View submitted campaign ${campaign.title}`}
+              onPress={() => router.push({ pathname: '/campaign/[id]', params: { id: `${campaign.apiSubmissionStatus === 'submitted' ? 'api' : 'local'}-${campaign.id}` } } as never)}
+              style={({ pressed }) => [styles.localCampaignRow, pressed && styles.pressed]}
+            >
+              <View style={styles.localCampaignCopy}>
+                <Text style={styles.localCampaignTitle}>{campaign.title || 'Untitled campaign'}</Text>
+                <Text style={styles.localCampaignMeta}>{campaign.category || 'Campaign'} · {campaign.creatorName || displayName}</Text>
+                <Text style={styles.localCampaignStatus}>{campaign.apiSubmissionStatus === 'submitted' ? 'SIGNAL API · shared with your account' : 'On this device · not synced to your account'}</Text>
+              </View>
+              <Text style={styles.localCampaignArrow}>›</Text>
+            </Pressable>)}
+          </View> : <EmptyState
             title="No campaigns created yet"
-            description="No campaigns are linked to this account yet. The Create screen is a preview and does not submit campaigns."
+            description="Submitted campaigns saved to this device or synced to your SIGNAL account will appear here."
             action={
               <Pressable
                 accessibilityRole="button"
@@ -85,7 +115,7 @@ export default function ProfileScreen() {
                 <Text style={styles.primaryButtonText}>Create Campaign</Text>
               </Pressable>
             }
-          />
+          />}
         </View>
 
         <View style={styles.section}>
@@ -105,10 +135,10 @@ export default function ProfileScreen() {
             {settings.map((item, index) => (
               <View key={item.label} style={[styles.settingRow, index < settings.length - 1 && styles.settingDivider]}>
                 <View style={styles.settingLeft}>
-                  <SymbolView name={item.symbol} size={17} tintColor={C.brown} />
+                  <SymbolView name={item.symbol} size={17} tintColor={C.text} />
                   <Text style={styles.settingLabel}>{item.label}</Text>
                 </View>
-                <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={14} tintColor="#B4AA9D" />
+                <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={14} tintColor={C.muted} />
               </View>
             ))}
           </View>
@@ -139,32 +169,39 @@ const styles = StyleSheet.create({
   safe: { flex: 1, minHeight: 0, backgroundColor: C.paper },
   scroll: { flex: 1, minHeight: 0 },
   content: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 128, maxWidth: 680, width: '100%', alignSelf: 'center' },
-  wordmark: { color: C.brown, letterSpacing: 2.4, fontSize: 11, fontWeight: '700', textAlign: 'center', marginBottom: 22 },
-  profileCard: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, backgroundColor: C.white, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
-  avatar: { width: 62, height: 62, borderRadius: 31, backgroundColor: C.brownLight, borderWidth: 1, borderColor: '#DFD2C1', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: C.brown, fontSize: 19, fontWeight: '700', letterSpacing: 0.5 },
+  wordmark: { color: C.text, letterSpacing: 2.4, fontSize: 11, fontWeight: '700', textAlign: 'center', marginBottom: 22 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
+  avatar: { width: 62, height: 62, borderRadius: 31, backgroundColor: C.brownLight, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: C.text, fontSize: 19, fontWeight: '700', letterSpacing: 0.5 },
   profileCopy: { flex: 1, minWidth: 0 },
-  name: { color: C.ink, fontSize: 21, lineHeight: 27, fontWeight: '600' },
+  name: { color: C.text, fontSize: 21, lineHeight: 27, fontWeight: '600' },
   email: { color: C.muted, fontSize: 13, marginTop: 3 },
   status: { alignSelf: 'flex-start', backgroundColor: C.brownLight, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 5, marginTop: 10 },
-  statusText: { color: C.brown, fontSize: 10, fontWeight: '700' },
+  statusText: { color: C.text, fontSize: 10, fontWeight: '700' },
   section: { marginTop: 31 },
-  sectionHeading: { color: C.ink, fontSize: 23, lineHeight: 29, fontWeight: '600', letterSpacing: -0.35, marginBottom: 12 },
-  emptyCard: { padding: 17, backgroundColor: C.white, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
-  emptyTitle: { color: C.ink, fontSize: 15, fontWeight: '700' },
+  sectionHeading: { color: C.text, fontSize: 23, lineHeight: 29, fontWeight: '600', letterSpacing: -0.35, marginBottom: 12 },
+  emptyCard: { padding: 17, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
+  emptyTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
   emptyDescription: { color: C.muted, fontSize: 12, lineHeight: 19, marginTop: 6 },
+  localCampaignList: { gap: 9 },
+  localCampaignRow: { minHeight: 78, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
+  localCampaignCopy: { flex: 1, minWidth: 0, gap: 4 },
+  localCampaignTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
+  localCampaignMeta: { color: C.muted, fontSize: 11, lineHeight: 16 },
+  localCampaignStatus: { color: C.green, fontSize: 10, fontWeight: '700' },
+  localCampaignArrow: { color: C.text, fontSize: 25, lineHeight: 28 },
   primaryButton: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: 17, marginTop: 15, backgroundColor: C.brown, borderRadius: 6 },
-  primaryButtonText: { color: C.white, fontSize: 12, fontWeight: '700' },
+  primaryButtonText: { color: C.espresso, fontSize: 12, fontWeight: '700' },
   pressed: { opacity: 0.72 },
-  settingsCard: { backgroundColor: C.white, borderWidth: 1, borderColor: C.line, borderRadius: 9, paddingHorizontal: 15 },
+  settingsCard: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9, paddingHorizontal: 15 },
   settingRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   settingsHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   previewNote: { color: C.muted, fontSize: 10, marginBottom: 12 },
   settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingDivider: { borderBottomWidth: 1, borderBottomColor: C.line },
-  settingLabel: { color: C.ink, fontSize: 13, fontWeight: '600' },
-  signOutRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, marginTop: 12, backgroundColor: C.white, borderWidth: 1, borderColor: C.line, borderRadius: 9, opacity: 0.8 },
+  settingLabel: { color: C.text, fontSize: 13, fontWeight: '600' },
+  signOutRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 15, marginTop: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9 },
   signOutTitle: { color: C.muted, fontSize: 13, fontWeight: '600' },
-  signOutError: { color: '#8A5140', fontSize: 11, lineHeight: 16, marginTop: 8 },
-  footer: { color: C.brown, textAlign: 'center', fontSize: 12, letterSpacing: 0.7, marginTop: 32 },
+  signOutError: { color: C.red, fontSize: 11, lineHeight: 16, marginTop: 8 },
+  footer: { color: C.text, textAlign: 'center', fontSize: 12, letterSpacing: 0.7, marginTop: 32 },
 });

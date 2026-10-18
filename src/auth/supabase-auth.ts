@@ -13,6 +13,20 @@ export type AuthSession = {
   user: AuthUser;
 };
 
+export class AuthRequestError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  readonly retryAfterMs: number | null;
+
+  constructor(status: number, code: string | null, message: string, retryAfterMs: number | null = null) {
+    super(message);
+    this.name = 'AuthRequestError';
+    this.status = status;
+    this.code = code;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
 type TokenResponse = {
   access_token: string;
   refresh_token: string;
@@ -30,9 +44,18 @@ const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 export const isAuthConfigured = Boolean(supabaseUrl && publishableKey);
+let inFlightRefresh: { refreshToken: string; promise: Promise<AuthSession> } | null = null;
 
 function authError(message: string): Error {
   return new Error(message);
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null;
 }
 
 async function request<T>(path: string, body?: unknown, accessToken?: string): Promise<T> {
@@ -52,7 +75,7 @@ async function request<T>(path: string, body?: unknown, accessToken?: string): P
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
-    throw authError('Could not reach the authentication service. Check your connection and try again.');
+    throw new AuthRequestError(0, 'AUTH_NETWORK_ERROR', 'Could not reach the authentication service. Check your connection and try again.');
   }
 
   const result = await response.json().catch(() => ({})) as Record<string, unknown>;
@@ -69,7 +92,17 @@ async function request<T>(path: string, body?: unknown, accessToken?: string): P
     if (normalized.includes('already registered') || normalized.includes('already been registered')) {
       throw authError('An account with this email may already exist. Try signing in instead.');
     }
-    throw authError(providerMessage || 'The authentication request could not be completed. Please try again.');
+    const code = typeof result.error_code === 'string'
+      ? result.error_code
+      : typeof result.code === 'string'
+        ? result.code
+        : null;
+    throw new AuthRequestError(
+      response.status,
+      code,
+      providerMessage || 'The authentication request could not be completed. Please try again.',
+      parseRetryAfter(response.headers.get('Retry-After')),
+    );
   }
   return result as T;
 }
@@ -95,6 +128,10 @@ async function saveSession(session: AuthSession): Promise<AuthSession> {
   return session;
 }
 
+export async function clearStoredSession(): Promise<void> {
+  await sessionStorage.clear();
+}
+
 export async function signInWithPassword(email: string, password: string): Promise<AuthSession> {
   const response = await request<TokenResponse>('token?grant_type=password', { email, password });
   return saveSession(toSession(response));
@@ -118,18 +155,39 @@ async function refresh(session: AuthSession): Promise<AuthSession> {
   return saveSession(toSession(response));
 }
 
+async function validateStoredSession(session: AuthSession): Promise<void> {
+  const user = await request<AuthUser>('user', undefined, session.access_token);
+  if (user.id !== session.user.id) {
+    throw new AuthRequestError(401, 'SESSION_USER_MISMATCH', 'The stored session no longer matches its account.');
+  }
+}
+
+function isDefinitiveSessionFailure(error: unknown): boolean {
+  return error instanceof AuthRequestError && [400, 401, 403].includes(error.status);
+}
+
 export async function restoreSession(): Promise<AuthSession | null> {
   try {
     const rawSession = await sessionStorage.read();
     if (!rawSession) return null;
     const stored = JSON.parse(rawSession) as AuthSession;
     if (!stored.access_token || !stored.refresh_token || !stored.user?.id) throw new Error('Invalid saved session');
-    if (stored.expires_at > Math.floor(Date.now() / 1000) + 60) return stored;
+    if (stored.expires_at > Math.floor(Date.now() / 1000) + 60) {
+      try {
+        await validateStoredSession(stored);
+        return stored;
+      } catch (validationError) {
+        if (!isDefinitiveSessionFailure(validationError)) return null;
+      }
+    }
     try {
       return await refresh(stored);
-    } catch {
-      // Keep an unexpired session available during a brief network outage.
-      if (stored.expires_at > Math.floor(Date.now() / 1000)) return stored;
+    } catch (refreshError) {
+      if (isDefinitiveSessionFailure(refreshError)) {
+        await clearStoredSession();
+        return null;
+      }
+      // Keep the persisted record for a later retry, but don't treat it as validated.
       return null;
     }
   } catch {
@@ -138,15 +196,20 @@ export async function restoreSession(): Promise<AuthSession | null> {
   }
 }
 
-export async function refreshSession(session: AuthSession): Promise<AuthSession> {
-  if (session.expires_at > Math.floor(Date.now() / 1000) + 60) return session;
-  return refresh(session);
+export async function refreshSession(session: AuthSession, force = false): Promise<AuthSession> {
+  if (!force && session.expires_at > Math.floor(Date.now() / 1000) + 60) return session;
+  if (inFlightRefresh?.refreshToken === session.refresh_token) return inFlightRefresh.promise;
+  const promise = refresh(session).finally(() => {
+    if (inFlightRefresh?.promise === promise) inFlightRefresh = null;
+  });
+  inFlightRefresh = { refreshToken: session.refresh_token, promise };
+  return promise;
 }
 
 export async function signOutSession(session: AuthSession): Promise<void> {
   try {
     await request<void>('logout', {}, session.access_token);
   } finally {
-    await sessionStorage.clear();
+    await clearStoredSession();
   }
 }

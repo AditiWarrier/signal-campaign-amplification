@@ -11,6 +11,8 @@ export type DiscoveryCampaign = {
   category: CampaignCategory;
   description: string;
   creator: string;
+  /** Stable fictional identity for the demo creator; never an authenticated account. */
+  creatorId: string;
   raised: number;
   goal: number;
   platform: 'Instagram' | 'Facebook';
@@ -33,6 +35,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     category: 'Environment',
     description: 'A volunteer group is organizing a native planting day and sharing simple ways nearby residents can care for the creek.',
     creator: 'Creekside Neighbors (fictional group)',
+    creatorId: 'demo-creator-creekside',
     raised: 2675,
     goal: 5000,
     platform: 'Instagram',
@@ -52,6 +55,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     category: 'Education',
     description: 'A fictional neighborhood reading circle wants more families to know about its free after-school book sessions.',
     creator: 'Pages Together (fictional collective)',
+    creatorId: 'demo-creator-pages-together',
     raised: 1320,
     goal: 3200,
     platform: 'Facebook',
@@ -71,6 +75,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     category: 'Community',
     description: 'A sample community pantry is raising awareness of its weekly produce exchange and volunteer sign-up days.',
     creator: 'Eastside Pantry Project (fictional)',
+    creatorId: 'demo-creator-eastside-pantry',
     raised: 1840,
     goal: 4000,
     platform: 'Instagram',
@@ -90,6 +95,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     category: 'Human Rights',
     description: 'A fictional volunteer team is sharing details for a free, plain-language community information workshop.',
     creator: 'Common Ground Helpers (fictional team)',
+    creatorId: 'demo-creator-common-ground',
     raised: 740,
     goal: 2800,
     platform: 'Facebook',
@@ -109,6 +115,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     category: 'Community',
     description: 'An independent fictional arts collective is preparing a short film about the people who make a neighborhood feel like home.',
     creator: 'Open Frame Studio (fictional collective)',
+    creatorId: 'demo-creator-open-frame',
     raised: 920,
     goal: 3000,
     platform: 'Instagram',

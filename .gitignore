@@ -37,6 +37,7 @@ yarn-error.*
 .env*.local
 secrets/
 credentials/
+.data/
 supabase/.temp/
 *.credentials
 *.credentials.*

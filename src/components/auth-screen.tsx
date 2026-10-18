@@ -15,14 +15,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-context';
+import { Palette as C } from '@/constants/theme';
 
 type AuthMode = 'login' | 'register';
-
-const C = {
-  paper: '#EEE8DF', white: '#FFFEFA', ink: '#302A25', muted: '#776E65',
-  line: '#E8E1D7', brown: '#74563F', brownLight: '#EDE5DA', red: '#8A5140',
-  green: '#536D58',
-};
 
 function friendlyError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -34,7 +29,7 @@ function Field({ label, error, accessory, ...props }: TextInputProps & { label: 
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={[styles.inputWrap, error && styles.inputError]}>
-        <TextInput {...props} style={[styles.input, props.style]} placeholderTextColor="#92877D" />
+        <TextInput {...props} style={[styles.input, props.style]} placeholderTextColor={C.placeholder} />
         {accessory}
       </View>
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
@@ -152,7 +147,7 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
             {notice ? <Text accessibilityRole="alert" style={styles.successMessage}>{notice}</Text> : null}
 
             <Pressable accessibilityRole="button" disabled={loading} onPress={submit} style={({ pressed }) => [styles.submitButton, (pressed || loading) && styles.pressed]}>
-              {loading ? <ActivityIndicator color={C.white} /> : <Text style={styles.submitText}>{registering ? 'Create Account' : 'Sign In'}</Text>}
+              {loading ? <ActivityIndicator color={C.espresso} /> : <Text style={styles.submitText}>{registering ? 'Create Account' : 'Sign In'}</Text>}
             </Pressable>
 
             <View style={styles.switchRow}>
@@ -174,27 +169,27 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minHeight: 0 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 22, paddingVertical: 28 },
   content: { width: '100%', maxWidth: 460, alignSelf: 'center', justifyContent: 'center', flexGrow: 1 },
-  wordmark: { color: C.brown, letterSpacing: 2.5, fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 28 },
-  title: { color: C.ink, fontSize: 30, lineHeight: 37, fontWeight: '600', letterSpacing: -0.5 },
+  wordmark: { color: C.text, letterSpacing: 2.5, fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 28 },
+  title: { color: C.text, fontSize: 30, lineHeight: 37, fontWeight: '600', letterSpacing: -0.5 },
   intro: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 7, marginBottom: 22 },
-  setupNotice: { backgroundColor: '#E8E1D7', borderRadius: 8, padding: 13, marginBottom: 17 },
-  setupTitle: { color: C.ink, fontSize: 12, fontWeight: '700' },
+  setupNotice: { backgroundColor: C.surfaceSoft, borderRadius: 8, padding: 13, marginBottom: 17 },
+  setupTitle: { color: C.text, fontSize: 12, fontWeight: '700' },
   setupCopy: { color: C.muted, fontSize: 11, lineHeight: 17, marginTop: 5 },
   fieldGroup: { marginBottom: 15 },
-  fieldLabel: { color: C.ink, fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  inputWrap: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.line, borderRadius: 7, backgroundColor: C.white, paddingHorizontal: 12 },
+  fieldLabel: { color: C.text, fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  inputWrap: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.line, borderRadius: 7, backgroundColor: C.surface, paddingHorizontal: 12 },
   inputError: { borderColor: C.red },
-  input: { flex: 1, minWidth: 0, minHeight: 46, color: C.ink, fontSize: 13, paddingVertical: 10 },
+  input: { flex: 1, minWidth: 0, minHeight: 46, color: C.text, fontSize: 13, paddingVertical: 10 },
   visibilityButton: { paddingVertical: 10, paddingLeft: 10 },
-  visibilityText: { color: C.brown, fontSize: 11, fontWeight: '700' },
+  visibilityText: { color: C.text, fontSize: 11, fontWeight: '700' },
   fieldError: { color: C.red, fontSize: 10, marginTop: 5 },
   errorMessage: { color: C.red, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   successMessage: { color: C.green, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   submitButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: C.brown, borderRadius: 7, marginTop: 5 },
-  submitText: { color: C.white, fontSize: 13, fontWeight: '700' },
+  submitText: { color: C.espresso, fontSize: 13, fontWeight: '700' },
   pressed: { opacity: 0.74 },
   switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 18 },
   switchCopy: { color: C.muted, fontSize: 11 },
-  switchLink: { color: C.brown, fontSize: 11, fontWeight: '700' },
+  switchLink: { color: C.text, fontSize: 11, fontWeight: '700' },
   footer: { color: C.muted, fontSize: 10, lineHeight: 15, textAlign: 'center', marginTop: 26 },
 });

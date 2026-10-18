@@ -1,19 +1,23 @@
 import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Palette as C } from '@/constants/theme';
 import { discoveryCampaigns, formatIsoDate, getDeadlineLabel, isDeadlineExpired, type IsoDate } from '@/data/campaigns';
 import { useUtcToday } from '@/hooks/use-utc-today';
 import { useWebScrollDiagnostics } from '@/hooks/use-web-scroll-diagnostics';
+import { readCampaignDemoContributions } from '@/data/demo-contributions';
+import { formatUsdMinor } from '@/data/funding';
+import { getSignalActivityWithRefresh, isSignalApiConfigured, syncCampaignSubmissionToApi, type SignalActivityEvent } from '@/data/signal-api';
+import { mergeAccountEvents, readLocalActivityEvents, type LocalActivityEvent } from '@/data/local-activity';
+import { readCampaignDraft, readCampaignSubmission, readCampaignSubmissions, writeCampaignDraft, writeCampaignSubmission } from '@/data/campaign-draft-storage';
+import { useAuth } from '@/auth/auth-context';
+import type { LocalDemoContribution } from '@/types/local-campaign';
 
-const C = {
-  paper: '#EEE8DF', white: '#FFFEFA', ink: '#302A25', muted: '#776E65',
-  line: '#E8E1D7', brown: '#74563F', brownLight: '#EDE5DA', green: '#536D58',
-};
-
-type ActivityFilter = 'All' | 'Campaign Updates' | 'Funding Milestones';
-type ActivityKind = 'created' | 'milestone' | 'deadline' | 'ended' | 'simulated-status';
+type ActivityFilter = 'All' | 'Campaign Updates' | 'Contributions & funding';
+type ActivityKind = 'created' | 'milestone' | 'deadline' | 'ended' | 'simulated-status' | 'demo-contribution' | 'account-status' | 'account-contribution';
 
 type ActivityEvent = {
   id: string;
@@ -21,24 +25,54 @@ type ActivityEvent = {
   date: IsoDate;
   kind: ActivityKind;
   title: string;
+  campaignTitle?: string;
   description: string;
   marker: string;
+  source: 'demo' | 'on-device' | 'recovered-device' | 'api';
+  localOwnerId?: string;
+  eventType?: string;
+  actionId?: string;
 };
 
-const filters: ActivityFilter[] = ['All', 'Campaign Updates', 'Funding Milestones'];
+const filters: ActivityFilter[] = ['All', 'Campaign Updates', 'Contributions & funding'];
+
+type RequestFailure = Error & { status?: unknown; code?: unknown; retryAfterMs?: unknown };
+
+function isRequestFailure(error: unknown, name: 'SignalApiError' | 'AuthRequestError'): error is RequestFailure {
+  return error instanceof Error && error.name === name;
+}
+
+function activityErrorMessage(error: unknown): string {
+  if (isRequestFailure(error, 'AuthRequestError') && typeof error.status === 'number' && error.status > 0) {
+    return `Supabase Auth returned HTTP ${error.status}${typeof error.code === 'string' ? ` ${error.code}` : ''}: ${error.message}`;
+  }
+  return error instanceof Error ? error.message : 'SIGNAL API Activity request failed for an unknown reason.';
+}
+
+function retryDelayFrom(error: unknown): number | null {
+  const recognized = isRequestFailure(error, 'SignalApiError') || isRequestFailure(error, 'AuthRequestError');
+  if (!recognized || error.status !== 429) return null;
+  return typeof error.retryAfterMs === 'number' && Number.isFinite(error.retryAfterMs) && error.retryAfterMs >= 0
+    ? error.retryAfterMs
+    : null;
+}
+
+function isRateLimitError(error: unknown): boolean {
+  return (isRequestFailure(error, 'SignalApiError') || isRequestFailure(error, 'AuthRequestError')) && error.status === 429;
+}
 
 // Fictional sample activity tied to campaign dates and existing demo campaign IDs.
 const events: ActivityEvent[] = [
-  { id: 'creekside-created', campaignId: 'creekside-native-plants', date: '2026-10-02', kind: 'created', title: 'Campaign submitted', description: 'A new fictional neighborhood creek restoration campaign was added to the demo feed.', marker: '＋' },
-  { id: 'books-created', campaignId: 'open-books-after-school', date: '2026-09-29', kind: 'created', title: 'Campaign submitted', description: 'A fictional reading circle campaign was added to the demo feed.', marker: '＋' },
-  { id: 'rights-created', campaignId: 'know-your-rights-workshop', date: '2026-09-15', kind: 'created', title: 'Campaign submitted', description: 'A fictional community rights workshop campaign was added to the demo feed.', marker: '＋' },
-  { id: 'books-milestone', campaignId: 'open-books-after-school', date: '2026-10-05', kind: 'milestone', title: 'Sample funding milestone', description: 'This fictional campaign passed its first $1,000 demo-funding milestone. This is sample activity, not a recorded payment.', marker: '$' },
-  { id: 'stories-created', campaignId: 'stories-from-main-street', date: '2026-10-08', kind: 'created', title: 'Campaign submitted', description: 'A fictional arts collective campaign was added to the demo feed.', marker: '＋' },
-  { id: 'rights-ended', campaignId: 'know-your-rights-workshop', date: '2026-10-10', kind: 'ended', title: 'Funding period ended', description: 'The sample funding window has closed. Its activity figures are fictional demo data.', marker: '✓' },
-  { id: 'neighbors-created', campaignId: 'neighbors-share-fresh-food', date: '2026-10-12', kind: 'created', title: 'Campaign submitted', description: 'A fictional neighborhood food-access campaign was added to the demo feed.', marker: '＋' },
-  { id: 'creekside-status', campaignId: 'creekside-native-plants', date: '2026-10-14', kind: 'simulated-status', title: 'Simulated amplification status update', description: 'This campaign is marked ready for amplification in the demo. No live ads or distribution are running through SIGNAL.', marker: '↗' },
-  { id: 'creekside-halfway', campaignId: 'creekside-native-plants', date: '2026-10-15', kind: 'milestone', title: 'Sample funding passed halfway', description: 'The fictional demo total is over half of its sample goal. This is not a real transaction or payment record.', marker: '◎' },
-  { id: 'books-deadline', campaignId: 'open-books-after-school', date: '2026-10-16', kind: 'deadline', title: 'Funding deadline approaching', description: 'The fictional campaign deadline is coming up. Check the campaign page for its current demo deadline.', marker: '◷' },
+  { id: 'creekside-created', campaignId: 'creekside-native-plants', date: '2026-10-02', kind: 'created', title: 'Campaign submitted', description: 'A new fictional neighborhood creek restoration campaign was added to the demo feed.', marker: '＋', source: 'demo' },
+  { id: 'books-created', campaignId: 'open-books-after-school', date: '2026-09-29', kind: 'created', title: 'Campaign submitted', description: 'A fictional reading circle campaign was added to the demo feed.', marker: '＋', source: 'demo' },
+  { id: 'rights-created', campaignId: 'know-your-rights-workshop', date: '2026-09-15', kind: 'created', title: 'Campaign submitted', description: 'A fictional community rights workshop campaign was added to the demo feed.', marker: '＋', source: 'demo' },
+  { id: 'books-milestone', campaignId: 'open-books-after-school', date: '2026-10-05', kind: 'milestone', title: 'Sample funding milestone', description: 'This fictional campaign passed its first $1,000 demo-funding milestone. This is sample activity, not a recorded payment.', marker: '$', source: 'demo' },
+  { id: 'stories-created', campaignId: 'stories-from-main-street', date: '2026-10-08', kind: 'created', title: 'Campaign submitted', description: 'A fictional arts collective campaign was added to the demo feed.', marker: '＋', source: 'demo' },
+  { id: 'rights-ended', campaignId: 'know-your-rights-workshop', date: '2026-10-10', kind: 'ended', title: 'Funding period ended', description: 'The sample funding window has closed. Its activity figures are fictional demo data.', marker: '✓', source: 'demo' },
+  { id: 'neighbors-created', campaignId: 'neighbors-share-fresh-food', date: '2026-10-12', kind: 'created', title: 'Campaign submitted', description: 'A fictional neighborhood food-access campaign was added to the demo feed.', marker: '＋', source: 'demo' },
+  { id: 'creekside-status', campaignId: 'creekside-native-plants', date: '2026-10-14', kind: 'simulated-status', title: 'Simulated amplification status update', description: 'This campaign is marked ready for amplification in the demo. No live ads or distribution are running through SIGNAL.', marker: '↗', source: 'demo' },
+  { id: 'creekside-halfway', campaignId: 'creekside-native-plants', date: '2026-10-15', kind: 'milestone', title: 'Sample funding passed halfway', description: 'The fictional demo total is over half of its sample goal. This is not a real transaction or payment record.', marker: '◎', source: 'demo' },
+  { id: 'books-deadline', campaignId: 'open-books-after-school', date: '2026-10-16', kind: 'deadline', title: 'Funding deadline approaching', description: 'The fictional campaign deadline is coming up. Check the campaign page for its current demo deadline.', marker: '◷', source: 'demo' },
 ];
 
 function formatEventDate(date: IsoDate): string {
@@ -61,15 +95,185 @@ function eventDescription(event: ActivityEvent, campaign: (typeof discoveryCampa
 }
 
 export default function ActivityScreen() {
+  const { session, isLoading: authLoading, refreshAccessToken } = useAuth();
+  const authRef = useRef({ session, authLoading, refreshAccessToken });
+  authRef.current = { session, authLoading, refreshAccessToken };
   const today = useUtcToday();
   const scrollRef = useRef<ScrollView>(null);
   useWebScrollDiagnostics(scrollRef, 'activity');
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>('All');
+  const [demoContributionEvents, setDemoContributionEvents] = useState<ActivityEvent[]>([]);
+  const [localAccountEvents, setLocalAccountEvents] = useState<ActivityEvent[]>([]);
+  const [accountEvents, setAccountEvents] = useState<ActivityEvent[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [apiStatus, setApiStatus] = useState('');
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [apiRequestSucceeded, setApiRequestSucceeded] = useState(false);
+  const [retryAfterUntil, setRetryAfterUntil] = useState(0);
+  const [retryClock, setRetryClock] = useState(Date.now());
+  const retryInFlight = useRef(false);
+  const retryAfterSeconds = Math.max(0, Math.ceil((retryAfterUntil - retryClock) / 1000));
 
-  const visibleEvents = useMemo(() => events
+  useEffect(() => {
+    if (!retryAfterUntil) return;
+    const timer = setInterval(() => setRetryClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [retryAfterUntil]);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    const currentAuth = authRef.current;
+    const currentSession = currentAuth.session;
+    if (currentAuth.authLoading) return () => { active = false; };
+    const ownerId = currentSession?.user.id ?? 'device-draft';
+    setLocalAccountEvents([]);
+    setLocalLoading(true);
+    setLocalError('');
+    const refreshLocalActivity = () => {
+      void readLocalActivityEvents(ownerId).then((items) => {
+        if (active) {
+          setLocalAccountEvents(items.map((item) => toLocalEvent(item, ownerId)));
+          setLocalLoading(false);
+          setLocalError('');
+        }
+      }).catch(() => {
+        if (active) {
+          setLocalAccountEvents([]);
+          setLocalLoading(false);
+          setLocalError('Saved activity could not be read from this device.');
+        }
+      });
+      if (currentSession?.user.id) {
+        void readCampaignSubmissions(ownerId).then(async (entries) => {
+          const campaigns = await Promise.all(entries.map((entry) => readCampaignSubmission(ownerId, entry.id)));
+          if (active) setPendingSyncCount(campaigns.filter((campaign) => campaign && campaign.apiSubmissionStatus !== 'submitted').length);
+        }).catch(() => { if (active) setPendingSyncCount(0); });
+      } else {
+        setPendingSyncCount(0);
+      }
+    };
+    refreshLocalActivity();
+    const onLocalActivityChanged = () => refreshLocalActivity();
+    const onBrowserStorageChanged = (event: StorageEvent) => {
+      if (event.key?.startsWith('signal.campaign.draft.v1.') && (event.key.endsWith('.activity-events.v1') || event.key.includes('.submitted'))) refreshLocalActivity();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('signal:activity-updated', onLocalActivityChanged);
+      window.addEventListener('storage', onBrowserStorageChanged);
+    }
+    if (currentSession?.access_token && isSignalApiConfigured()) {
+      setLoading(true);
+      setApiStatus('');
+      setAccountEvents([]);
+      setApiRequestSucceeded(false);
+      void getSignalActivityWithRefresh(currentSession.access_token, (rejectedToken) => authRef.current.refreshAccessToken(rejectedToken)).then((items) => {
+        if (active) {
+          setAccountEvents(items.map(toAccountEvent));
+          setApiRequestSucceeded(true);
+          setRetryAfterUntil(0);
+        }
+      }).catch((error: unknown) => {
+        if (__DEV__) console.warn('[Activity] SIGNAL API request failed:', error);
+        if (active) {
+          setAccountEvents([]);
+          setApiStatus(activityErrorMessage(error));
+          setApiRequestSucceeded(false);
+          const delay = retryDelayFrom(error);
+          if (delay !== null || isRateLimitError(error)) {
+            setRetryClock(Date.now());
+            setRetryAfterUntil(Date.now() + (delay ?? 30_000));
+          }
+        }
+      }).finally(() => { if (active) setLoading(false); });
+    } else {
+      setAccountEvents([]);
+      setLoading(false);
+      setApiRequestSucceeded(false);
+      setApiStatus(currentSession ? 'SIGNAL API URL is not configured. Saved device activity remains available.' : 'Sign in to load private API activity.');
+    }
+    void Promise.all(discoveryCampaigns.map((campaign) => readCampaignDemoContributions(campaign.id)
+      .then((records) => records.map((record) => toContributionEvent(record, campaign.title)))
+      .catch(() => [] as ActivityEvent[])))
+      .then((groups) => { if (active) setDemoContributionEvents(groups.flat()); });
+    return () => {
+      active = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('signal:activity-updated', onLocalActivityChanged);
+        window.removeEventListener('storage', onBrowserStorageChanged);
+      }
+    };
+  }, [authLoading, session?.user.id]));
+
+  async function retryApiAndPendingSubmissions() {
+    if (retryInFlight.current || retryAfterSeconds > 0 || loading) return;
+    const currentSession = authRef.current.session;
+    if (!currentSession?.access_token) {
+      setApiStatus('Sign in to load private API activity.');
+      return;
+    }
+    if (!isSignalApiConfigured()) {
+      setApiStatus('SIGNAL API URL is not configured. Saved device activity remains available.');
+      return;
+    }
+    retryInFlight.current = true;
+    setLoading(true);
+    setApiRequestSucceeded(false);
+    setApiStatus('Checking the SIGNAL API…');
+    let syncFailure: string | null = null;
+    let remainingSyncCount = pendingSyncCount;
+    try {
+      const ownerId = currentSession.user.id;
+      const submissions = await readCampaignSubmissions(ownerId);
+      for (const entry of submissions) {
+        const campaign = await readCampaignSubmission(ownerId, entry.id);
+        if (!campaign || campaign.apiSubmissionStatus === 'submitted') continue;
+        try {
+          await syncCampaignSubmissionToApi(campaign, currentSession.access_token);
+          const synced = { ...campaign, apiSubmissionStatus: 'submitted' as const };
+          await writeCampaignSubmission(ownerId, synced);
+          const activeRaw = await readCampaignDraft(ownerId);
+          if (activeRaw) {
+            try { if (JSON.parse(activeRaw)?.id === synced.id) await writeCampaignDraft(ownerId, JSON.stringify(synced)); } catch { /* The archived status remains authoritative. */ }
+          }
+          remainingSyncCount = Math.max(0, remainingSyncCount - 1);
+        } catch (error) {
+          syncFailure = error instanceof Error ? error.message : 'A saved submission could not be synced.';
+          if (__DEV__) console.warn('[Activity] Campaign submission sync failed:', error);
+          if (isRateLimitError(error)) throw error;
+        }
+      }
+      const items = await getSignalActivityWithRefresh(currentSession.access_token, (rejectedToken) => authRef.current.refreshAccessToken(rejectedToken));
+      setAccountEvents(items.map(toAccountEvent));
+      setApiRequestSucceeded(true);
+      setRetryAfterUntil(0);
+      setPendingSyncCount(remainingSyncCount);
+      setApiStatus(syncFailure
+        ? `Activity loaded from SIGNAL API. Submission sync needs attention: ${syncFailure}`
+        : items.length ? 'Activity synced with SIGNAL API.' : 'SIGNAL API connected. No account events yet.');
+    } catch (error) {
+      if (__DEV__) console.warn('[Activity] Retry request failed:', error);
+      setAccountEvents([]);
+      setApiStatus(activityErrorMessage(error));
+      setApiRequestSucceeded(false);
+      const delay = retryDelayFrom(error);
+      if (delay !== null || isRateLimitError(error)) {
+        setRetryClock(Date.now());
+        setRetryAfterUntil(Date.now() + (delay ?? 30_000));
+      }
+    } finally {
+      retryInFlight.current = false;
+      setLoading(false);
+    }
+  }
+
+  const allEvents = useMemo(() => [...mergeAccountEvents(localAccountEvents, accountEvents), ...events, ...demoContributionEvents], [accountEvents, demoContributionEvents, localAccountEvents]);
+
+  const visibleEvents = useMemo(() => allEvents
     .filter((event) => selectedFilter === 'All'
-      || (selectedFilter === 'Funding Milestones' ? event.kind === 'milestone' : event.kind !== 'milestone'))
-    .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id)), [selectedFilter]);
+      || (selectedFilter === 'Contributions & funding' ? event.kind === 'milestone' || event.kind === 'demo-contribution' || event.kind === 'account-contribution' : event.kind !== 'milestone' && event.kind !== 'demo-contribution' && event.kind !== 'account-contribution'))
+    .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id)), [allEvents, selectedFilter]);
 
   const campaignsById = useMemo(() => new Map(discoveryCampaigns.map((campaign) => [campaign.id, campaign])), []);
 
@@ -80,9 +284,15 @@ export default function ActivityScreen() {
         <Text style={styles.intro}>Follow the progress of campaigns and the messages they aim to amplify.</Text>
 
         <View style={styles.demoNote}>
-          <Text style={styles.demoNoteText}>Fictional demo activity · sample funding figures are not payment records.</Text>
+          <Text style={styles.demoNoteText}>{session ? 'Account events are loaded from this device and the SIGNAL API when available. Fictional sample activity is labeled Demo.' : 'Saved activity on this device is labeled On this device. Fictional sample activity is labeled Demo. Sign in to load private API activity.'}</Text>
         </View>
-
+        {apiStatus || pendingSyncCount > 0 ? <View style={styles.syncStatus}><Text style={styles.syncStatusText}>{apiStatus || `${pendingSyncCount} saved ${pendingSyncCount === 1 ? 'campaign is' : 'campaigns are'} waiting to sync.`}</Text>{session && isSignalApiConfigured() && <Pressable disabled={loading || retryAfterSeconds > 0} onPress={() => void retryApiAndPendingSubmissions()} accessibilityRole="button" accessibilityState={{ disabled: loading || retryAfterSeconds > 0 }}><Text style={styles.retryText}>{retryAfterSeconds > 0 ? `Retry in ${retryAfterSeconds}s` : loading ? 'Syncing…' : 'Retry sync'}</Text></Pressable>}</View> : null}
+        {loading ? <Text style={styles.loadingText}>Loading account activity…</Text> : null}
+        {localLoading ? <Text style={styles.loadingText}>Loading saved on-device activity…</Text> : null}
+        {localError ? <View style={styles.errorState}><Text style={styles.errorText}>{localError}</Text></View> : null}
+        {!localLoading && !loading && !localError && apiRequestSucceeded && localAccountEvents.length === 0 && accountEvents.length === 0
+          ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>No account activity yet</Text><Text style={styles.emptyDescription}>The Demo events below are fictional examples. Submit a campaign to add activity from this device.</Text></View>
+          : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterList}>
           {filters.map((filter) => {
             const selected = selectedFilter === filter;
@@ -114,17 +324,21 @@ export default function ActivityScreen() {
           <View style={styles.timeline}>
             {visibleEvents.map((event, index) => {
               const campaign = campaignsById.get(event.campaignId);
-              if (!campaign) return null;
+              const campaignTitle = campaign?.title ?? event.campaignTitle ?? event.title;
+              const campaignCategory = campaign?.category;
               return (
                 <Pressable
                   key={event.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${event.title} for ${campaign.title}. Open campaign details.`}
-                  onPress={() => router.push({ pathname: '/campaign/[id]', params: { id: campaign.id } } as never)}
+                  accessibilityRole={event.campaignId ? 'button' : 'text'}
+                  disabled={!event.campaignId}
+                  accessibilityLabel={`${event.title}${campaign ? ` for ${campaignTitle}. Open campaign details.` : ''}`}
+                  onPress={() => { if (event.campaignId) router.push({ pathname: '/campaign/[id]', params: event.localOwnerId
+                    ? { id: `local-${event.campaignId}`, owner: event.localOwnerId }
+                    : event.source === 'api' ? { id: `api-${event.campaignId}` } : { id: event.campaignId } } as never); }}
                   style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}
                 >
                   <View style={styles.markerColumn}>
-                    <View style={[styles.marker, event.kind === 'milestone' && styles.fundingMarker, event.kind === 'simulated-status' && styles.statusMarker]}>
+                    <View style={[styles.marker, (event.kind === 'milestone' || event.kind === 'demo-contribution') && styles.fundingMarker, event.kind === 'simulated-status' && styles.statusMarker]}>
                       <Text style={styles.markerText}>{event.marker}</Text>
                     </View>
                     {index < visibleEvents.length - 1 && <View style={styles.timelineLine} />}
@@ -134,9 +348,10 @@ export default function ActivityScreen() {
                       <Text style={styles.eventTitle}>{event.title}</Text>
                       <Text style={styles.eventDate}>{formatEventDate(event.date)}</Text>
                     </View>
-                    <Text style={styles.campaignName}>{campaign.title} · {campaign.category}</Text>
-                    <Text style={styles.eventDescription}>{eventDescription(event, campaign, today)}</Text>
-                    <Text style={styles.openLink}>View campaign →</Text>
+                    {event.campaignId ? <Text style={styles.campaignName}>{campaignTitle}{campaignCategory ? ` · ${campaignCategory}` : ''}</Text> : null}
+                    <Text style={styles.eventDescription}>{campaign ? eventDescription(event, campaign, today) : event.description}</Text>
+                    <Text style={styles.sourceLabel}>{event.source === 'api' ? 'SIGNAL API' : event.source === 'recovered-device' ? 'Recovered from this device' : event.source === 'on-device' ? 'On this device' : 'Demo'}</Text>
+                    {event.campaignId ? <Text style={styles.openLink}>View campaign →</Text> : null}
                   </View>
                 </Pressable>
               );
@@ -148,39 +363,112 @@ export default function ActivityScreen() {
   );
 }
 
+function toContributionEvent(record: LocalDemoContribution, title: string): ActivityEvent {
+  const parsedDate = new Date(record.createdAt);
+  const date = Number.isNaN(parsedDate.getTime()) ? new Date().toISOString().slice(0, 10) as IsoDate : parsedDate.toISOString().slice(0, 10) as IsoDate;
+  return {
+    id: record.id,
+    campaignId: record.campaignId,
+    date,
+    kind: 'demo-contribution',
+    title: 'Simulated demo contribution',
+    description: `${record.contributorName || 'Demo supporter'} recorded ${formatUsdMinor(record.amountMinor)} for “${title}”. This is a local simulation; no payment was made.`,
+    marker: '$',
+    source: 'demo',
+    eventType: 'demo.contribution',
+  };
+}
+
+function toLocalEvent(event: LocalActivityEvent, ownerId: string): ActivityEvent {
+  const recoveredAnonymous = event.metadata.recoveredFromAnonymousDevice === true;
+  return {
+    id: event.id,
+    campaignId: event.campaignId,
+    campaignTitle: event.campaignTitle,
+    date: dateFromTimestamp(event.createdAt),
+    kind: event.eventType === 'contribution.simulated' ? 'account-contribution' : 'account-status',
+    title: event.eventType === 'campaign.submitted' ? (recoveredAnonymous ? 'Recovered campaign submission' : 'Campaign submission saved') : 'Campaign activity',
+    description: recoveredAnonymous ? `${event.campaignTitle} · recovered from this device. The original account ownership could not be verified.` : `${event.campaignTitle} · saved on this device.`,
+    marker: event.eventType === 'contribution.simulated' ? '$' : '＋',
+    source: recoveredAnonymous ? 'recovered-device' : 'on-device',
+    localOwnerId: recoveredAnonymous ? 'device-draft' : ownerId,
+    eventType: event.eventType,
+    actionId: typeof event.metadata.contributionId === 'string' ? event.metadata.contributionId : undefined,
+  };
+}
+
+function toAccountEvent(event: SignalActivityEvent): ActivityEvent {
+  const date = dateFromTimestamp(event.createdAt);
+  const names: Record<string, string> = {
+    'campaign.draft_created': 'Campaign draft created',
+    'campaign.submitted': 'Campaign submission received',
+    'campaign.under_review': 'Campaign moved to review',
+    'campaign.approved': 'Campaign approved',
+    'campaign.rejected': 'Campaign returned for edits',
+    'contribution.simulated': 'Simulated demo contribution',
+  };
+  const contribution = event.eventType === 'contribution.simulated';
+  const amount = typeof event.metadata.amountMinor === 'number' ? formatUsdMinor(event.metadata.amountMinor) : '';
+  const title = event.campaignTitle ?? 'Campaign';
+  return {
+    id: event.id,
+    campaignId: event.campaignId ?? '',
+    date,
+    kind: contribution ? 'account-contribution' : 'account-status',
+    title: names[event.eventType] ?? 'Campaign activity',
+    description: contribution ? `A simulated contribution${amount ? ` of ${amount}` : ''} was recorded for “${title}”. No payment was processed.` : `${title} · ${event.eventType.replaceAll('.', ' ')}.`,
+    marker: contribution ? '$' : '↗',
+    source: 'api',
+    eventType: event.eventType,
+    actionId: typeof event.metadata.contributionId === 'string' ? event.metadata.contributionId : undefined,
+  };
+}
+
+function dateFromTimestamp(value: string): IsoDate {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? new Date(0).toISOString().slice(0, 10) as IsoDate : timestamp.toISOString().slice(0, 10) as IsoDate;
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, minHeight: 0, backgroundColor: C.paper },
   scroll: { flex: 1, minHeight: 0 },
   content: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 128, maxWidth: 680, width: '100%', alignSelf: 'center' },
-  title: { color: C.ink, fontSize: 31, lineHeight: 38, fontWeight: '600', letterSpacing: -0.6 },
+  title: { color: C.text, fontSize: 31, lineHeight: 38, fontWeight: '600', letterSpacing: -0.6 },
   intro: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 8, marginBottom: 17 },
-  demoNote: { backgroundColor: '#E8E1D7', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 7 },
+  demoNote: { backgroundColor: C.surfaceSoft, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 7 },
   demoNoteText: { color: C.muted, fontSize: 10, lineHeight: 15 },
+  syncStatus: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 9, marginTop: 10, borderRadius: 7, backgroundColor: C.surfaceSoft },
+  syncStatusText: { flex: 1, color: C.muted, fontSize: 10, lineHeight: 15 },
+  errorState: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, padding: 12, marginTop: 10, borderRadius: 7, backgroundColor: '#F6E7E2' },
+  errorText: { flex: 1, color: C.text, fontSize: 11, lineHeight: 16 },
+  retryText: { color: C.text, fontWeight: '700', fontSize: 11 },
+  loadingText: { color: C.muted, fontSize: 11, marginTop: 12 },
+  sourceLabel: { color: C.muted, fontSize: 9, fontWeight: '700', marginTop: 6, textTransform: 'uppercase' },
   filterList: { gap: 8, paddingVertical: 17 },
-  filterChip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 13, borderWidth: 1, borderColor: C.line, borderRadius: 18, backgroundColor: C.white },
+  filterChip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 13, borderWidth: 1, borderColor: C.line, borderRadius: 18, backgroundColor: C.surface },
   filterChipSelected: { backgroundColor: C.brown, borderColor: C.brown },
   filterText: { color: C.muted, fontSize: 11, fontWeight: '600' },
-  filterTextSelected: { color: C.white },
+  filterTextSelected: { color: C.espresso },
   listHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 3 },
-  listTitle: { color: C.ink, fontSize: 19, fontWeight: '600' },
+  listTitle: { color: C.text, fontSize: 19, fontWeight: '600' },
   count: { color: C.muted, fontSize: 10 },
   timeline: { marginTop: 12 },
   eventRow: { flexDirection: 'row', gap: 12, minHeight: 118 },
   pressed: { opacity: 0.74 },
   markerColumn: { width: 30, alignItems: 'center' },
-  marker: { zIndex: 1, width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: C.brownLight, borderWidth: 1, borderColor: '#DFD2C1' },
-  fundingMarker: { backgroundColor: '#E6EBDD', borderColor: '#D2DACB' },
-  statusMarker: { backgroundColor: '#E8E1D7', borderColor: '#D9CFC2' },
-  markerText: { color: C.brown, fontSize: 14, lineHeight: 18, fontWeight: '700' },
-  timelineLine: { position: 'absolute', top: 29, bottom: 0, width: 1, backgroundColor: '#D8CFC4' },
+  marker: { zIndex: 1, width: 29, height: 29, alignItems: 'center', justifyContent: 'center', borderRadius: 15, backgroundColor: C.brownLight, borderWidth: 1, borderColor: C.line },
+  fundingMarker: { backgroundColor: '#76836C', borderColor: C.green },
+  statusMarker: { backgroundColor: C.surfaceSoft, borderColor: C.line },
+  markerText: { color: C.text, fontSize: 14, lineHeight: 18, fontWeight: '700' },
+  timelineLine: { position: 'absolute', top: 29, bottom: 0, width: 1, backgroundColor: C.line },
   eventContent: { flex: 1, minWidth: 0, paddingBottom: 20, borderBottomWidth: 1, borderBottomColor: C.line },
   eventTopline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
-  eventTitle: { flex: 1, color: C.ink, fontSize: 14, lineHeight: 19, fontWeight: '700' },
+  eventTitle: { flex: 1, color: C.text, fontSize: 14, lineHeight: 19, fontWeight: '700' },
   eventDate: { color: C.muted, fontSize: 9, lineHeight: 16, flexShrink: 0 },
-  campaignName: { color: C.brown, fontSize: 10, fontWeight: '600', marginTop: 4 },
+  campaignName: { color: C.text, fontSize: 10, fontWeight: '600', marginTop: 4 },
   eventDescription: { color: C.muted, fontSize: 11, lineHeight: 17, marginTop: 7 },
-  openLink: { color: C.brown, fontSize: 10, fontWeight: '700', marginTop: 8 },
-  emptyState: { padding: 22, marginTop: 12, borderWidth: 1, borderColor: C.line, borderRadius: 9, backgroundColor: C.white },
-  emptyTitle: { color: C.ink, fontSize: 15, fontWeight: '700' },
+  openLink: { color: C.text, fontSize: 10, fontWeight: '700', marginTop: 8 },
+  emptyState: { padding: 22, marginTop: 12, borderWidth: 1, borderColor: C.line, borderRadius: 9, backgroundColor: C.surface },
+  emptyTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
   emptyDescription: { color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
 });
