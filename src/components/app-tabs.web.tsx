@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedView } from './themed-view';
 import { ThemedText } from './themed-text';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Signal, Spacing } from '@/constants/theme';
 
 const tabIcons = {
   Home: { ios: 'house.fill', android: 'home', web: 'home' },
@@ -23,7 +23,7 @@ const tabIcons = {
   Profile: { ios: 'person.fill', android: 'person', web: 'person' },
 } as const;
 
-export default function AppTabs() {
+export default function AppTabs({ signedIn = true }: { signedIn?: boolean }) {
   return (
     <Tabs style={styles.tabsRoot}>
       <TabSlot style={styles.tabSlot} />
@@ -36,13 +36,13 @@ export default function AppTabs() {
             <TabButton icon="Explore">Explore</TabButton>
           </TabTrigger>
           <TabTrigger name="create" href="/create" asChild>
-            <TabButton icon="Create">Create</TabButton>
+            <TabButton icon="Create" hidden={!signedIn}>Create</TabButton>
           </TabTrigger>
           <TabTrigger name="activity" href="/activity" asChild>
-            <TabButton icon="Activity">Activity</TabButton>
+            <TabButton icon="Activity" hidden={!signedIn}>Activity</TabButton>
           </TabTrigger>
           <TabTrigger name="profile" href="/profile" asChild>
-            <TabButton icon="Profile">Profile</TabButton>
+            <TabButton icon="Profile" hidden={!signedIn}>Profile</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -50,14 +50,14 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, icon, ...props }: TabTriggerSlotProps & { icon: keyof typeof tabIcons }) {
+export function TabButton({ children, isFocused, icon, hidden, ...props }: TabTriggerSlotProps & { icon: keyof typeof tabIcons; hidden?: boolean }) {
   return (
-    <Pressable {...props} style={({ pressed }) => [styles.tabPressable, pressed && styles.pressed]}>
+    <Pressable {...props} style={({ pressed }) => [styles.tabPressable, pressed && styles.pressed, hidden && styles.hiddenTab]}>
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={[styles.tabButtonView, { backgroundColor: isFocused ? '#626B42' : '#E8D5BD' }]}>
-        <SymbolView name={tabIcons[icon]} size={19} tintColor={isFocused ? '#FFFFFF' : '#514239'} />
-        <ThemedText style={[styles.tabLabel, { color: isFocused ? '#FFFFFF' : '#514239' }]}>
+        style={[styles.tabButtonView, { backgroundColor: isFocused ? Signal.forest : Signal.paper }]}>
+        <SymbolView name={tabIcons[icon]} size={19} tintColor={isFocused ? Signal.onDark : Signal.inkSoft} />
+        <ThemedText style={[styles.tabLabel, { color: isFocused ? Signal.onDark : Signal.inkSoft }]}>
           {children}
         </ThemedText>
       </ThemedView>
@@ -69,7 +69,7 @@ export function CustomTabList(props: TabListProps) {
   const insets = useSafeAreaInsets();
   return (
     <View {...props} style={[styles.tabListContainer, { paddingBottom: Math.max(insets.bottom, Spacing.two) }]}>
-      <ThemedView type="backgroundElement" style={[styles.innerContainer, { backgroundColor: '#E8D5BD' }]}>
+      <ThemedView type="backgroundElement" style={[styles.innerContainer, { backgroundColor: Signal.paper, borderWidth: 1, borderColor: Signal.hairline }]}>
         {props.children}
       </ThemedView>
     </View>
@@ -123,5 +123,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
-  tabLabel: { fontSize: 10, lineHeight: 14, fontWeight: '600' },
+  tabLabel: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  hiddenTab: { display: 'none' },
 });

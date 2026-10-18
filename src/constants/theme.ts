@@ -89,5 +89,37 @@ export const Spacing = {
   six: 64,
 } as const;
 
+/**
+ * SIGNAL refresh palette (v0/ui-refresh). Warm paper background, near-black ink,
+ * forest green and lake blue accents, sun yellow used sparingly.
+ * Applied to Home first; other screens still use `Colors`/`Palette` until migrated.
+ */
+export const Signal = {
+  paper: '#F5F0E6',
+  paperDeep: '#ECE4D4',
+  ink: '#1C211D',
+  inkSoft: '#4A5048',
+  hairline: '#D8CFBD',
+  forest: '#2E5B3C',
+  forestDeep: '#21452D',
+  lake: '#2A5B7C',
+  sun: '#E2AE3A',
+  onDark: '#F8F4EA',
+  scrim: '#0E130F',
+} as const;
+
+export const SignalFonts = {
+  display: Platform.select({ web: 'Georgia, "Times New Roman", serif', ios: 'Georgia', default: 'serif' }) ?? 'serif',
+  sans: Platform.select({ web: 'var(--font-display)', ios: 'System', default: 'sans-serif' }) ?? 'System',
+} as const;
+
+export const SignalType = {
+  eyebrow: { fontSize: 12, lineHeight: 16, letterSpacing: 1.6, fontWeight: '700' as const },
+  body: { fontSize: 16, lineHeight: 25 },
+  small: { fontSize: 14, lineHeight: 21 },
+  lead: { fontSize: 22, lineHeight: 30 },
+  sectionTitle: { fontSize: 28, lineHeight: 34 },
+} as const;
+
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;

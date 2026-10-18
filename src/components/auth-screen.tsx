@@ -101,6 +101,9 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
           <View style={styles.content}>
+            <Pressable accessibilityRole="link" accessibilityLabel="Back to Home" hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} style={styles.backLink}>
+              <Text style={styles.backLinkText}>{'← Back to Home'}</Text>
+            </Pressable>
             <Text style={styles.wordmark}>SIGNAL</Text>
             <Text style={styles.title}>{registering ? 'Create your account' : 'Welcome back'}</Text>
             <Text style={styles.intro}>{registering ? 'Join a community helping meaningful messages travel further.' : 'Sign in to continue to SIGNAL.'}</Text>
@@ -169,6 +172,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minHeight: 0 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 22, paddingVertical: 28 },
   content: { width: '100%', maxWidth: 460, alignSelf: 'center', justifyContent: 'center', flexGrow: 1 },
+  backLink: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginBottom: 8 },
+  backLinkText: { color: C.text, fontSize: 14, fontWeight: '600' },
   wordmark: { color: C.text, letterSpacing: 2.5, fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 28 },
   title: { color: C.text, fontSize: 30, lineHeight: 37, fontWeight: '600', letterSpacing: -0.5 },
   intro: { color: C.muted, fontSize: 14, lineHeight: 21, marginTop: 7, marginBottom: 22 },

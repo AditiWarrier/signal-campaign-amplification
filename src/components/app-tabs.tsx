@@ -1,12 +1,14 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-export default function AppTabs() {
+import { Signal } from '@/constants/theme';
+
+export default function AppTabs({ signedIn = true }: { signedIn?: boolean }) {
   return (
     <NativeTabs
-      backgroundColor="#E8D5BD"
-      indicatorColor="#626B42"
-      iconColor={{ default: '#514239', selected: '#FFFFFF' }}
-      labelStyle={{ default: { color: '#514239' }, selected: { color: '#FFFFFF' } }}>
+      backgroundColor={Signal.paper}
+      indicatorColor={Signal.forest}
+      iconColor={{ default: Signal.inkSoft, selected: Signal.onDark }}
+      labelStyle={{ default: { color: Signal.inkSoft }, selected: { color: Signal.forest } }}>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon md="home" sf="house.fill" />
@@ -16,15 +18,15 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon md="explore" sf="safari" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="create">
+      <NativeTabs.Trigger name="create" hidden={!signedIn}>
         <NativeTabs.Trigger.Label>Create</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon md="add" sf="plus" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="activity">
+      <NativeTabs.Trigger name="activity" hidden={!signedIn}>
         <NativeTabs.Trigger.Label>Activity</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon md="notifications" sf="bell" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
+      <NativeTabs.Trigger name="profile" hidden={!signedIn}>
         <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon md="person" sf="person" />
       </NativeTabs.Trigger>

@@ -13,8 +13,9 @@ function AppNavigator() {
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
+      {/* Home and Explore are public; account-only tabs are guarded in (tabs)/_layout. */}
+      <Stack.Screen name="(tabs)" />
       <Stack.Protected guard={Boolean(session)}>
-        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="campaign/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={!session}>
