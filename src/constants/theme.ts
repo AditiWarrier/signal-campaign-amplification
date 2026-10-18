@@ -106,6 +106,10 @@ export const Signal = {
   sun: '#E2AE3A',
   onDark: '#F8F4EA',
   scrim: '#0E130F',
+  charcoal: '#151816',
+  charcoalLine: '#2C312D',
+  onDarkSoft: '#B9BDB4',
+  butter: '#F6EECB',
 } as const;
 
 export const SignalFonts = {
