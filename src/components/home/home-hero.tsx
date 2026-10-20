@@ -8,7 +8,7 @@ const HERO_IMAGE = require('../../../assets/images/hero-community-signs.png');
 export function HomeHero({ width }: { width: number }) {
   const photoHeight = Math.round(Math.min(width * 1.08, 520));
   const archRadius = width / 2;
-  const headlineSize = Math.round(Math.min(46, Math.max(28, width * 0.09)));
+  const headlineSize = Math.round(Math.min(52, Math.max(31, width * 0.102)));
   const lineHeight = Math.round(headlineSize * 1.08);
 
   return (
