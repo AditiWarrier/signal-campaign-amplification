@@ -203,6 +203,7 @@ function createApp({ store, campaigns, auth, authMiddleware, authService, aiSugg
     ok: true,
     service: 'signal-api',
     contract: AUTH_DIAGNOSTIC_CONTRACT,
+    authentication: auth ? (auth.configured === false ? 'unconfigured' : 'configured') : 'unknown',
     persistence: campaigns ? (campaigns.configured ? 'supabase' : 'unconfigured') : 'backend-file',
   }));
 

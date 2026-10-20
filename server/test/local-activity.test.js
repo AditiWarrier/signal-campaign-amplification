@@ -158,6 +158,11 @@ test('Activity feed excludes fictional demo sources and preserves the real libra
   const activitySource = fs.readFileSync(path.join(__dirname, '../../src/app/(tabs)/activity.tsx'), 'utf8');
   assert.doesNotMatch(activitySource, /readCampaignDemoContributions|demoContributionEvents|const events:\s*ActivityEvent\[\]/);
   assert.doesNotMatch(activitySource, /source:\s*'demo'/);
+  assert.match(activitySource, /Account activity/);
+  assert.match(activitySource, /Preview examples/);
+  assert.match(activitySource, /Illustrative sample events · never account activity/);
+  assert.match(activitySource, /showPreviewExamples \? <View style=\{styles\.previewList\}>/);
+  assert.doesNotMatch(activitySource, /visibleDemo\.length \+ visibleEvents\.length/);
 
   const localEvent = {
     id: 'local:campaign.submitted:library-campaign',

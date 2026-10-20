@@ -87,6 +87,24 @@ test('auth middleware reports Supabase verification outages instead of mislabeli
   assert.doesNotMatch(JSON.stringify(body), new RegExp(token));
 });
 
+test('auth middleware distinguishes missing backend configuration from a Supabase verification outage', async () => {
+  const auth = createSupabaseAuth({});
+  const middleware = createAuthMiddleware(auth);
+  const claims = { iss: 'https://signal-test.supabase.co/auth/v1', exp: Math.floor(Date.now() / 1000) + 300 };
+  const token = `e30.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+  let status;
+  let body;
+  const response = { status(value) { status = value; return this; }, json(value) { body = value; return this; } };
+  await middleware({ get: () => `Bearer ${token}` }, response, () => assert.fail('unconfigured Auth must not authenticate'));
+  assert.equal(status, 503);
+  assert.deepEqual(body.error, {
+    code: 'AUTH_CONFIGURATION_UNAVAILABLE',
+    message: 'SIGNAL Auth is not configured on this server.',
+    diagnostic: 'auth_not_configured',
+  });
+  assert.equal(auth.configured, false);
+});
+
 test('auth middleware preserves Supabase Auth rate limits and Retry-After', async () => {
   const auth = createSupabaseAuth({
     url: 'https://signal-test.supabase.co', publishableKey: 'test-key',
@@ -290,7 +308,7 @@ test('an unconfirmed Supabase submission response cannot be reported as successf
 test('health and Supabase auth proxy routes validate requests', async (t) => {
   const { request } = await withApi(t);
   const health = await request('/api/health');
-  assert.deepEqual(health.data, { ok: true, service: 'signal-api', contract: 'auth-diagnostics-v1', persistence: 'backend-file' });
+  assert.deepEqual(health.data, { ok: true, service: 'signal-api', contract: 'auth-diagnostics-v1', authentication: 'configured', persistence: 'backend-file' });
   assert.equal(health.headers.get('X-SIGNAL-API-Contract'), 'auth-diagnostics-v1');
   assert.equal((await request('/api/auth/me')).status, 401);
   assert.equal((await request('/api/auth/login', { method: 'POST', body: { email: 'bad', password: 'short' } })).status, 400);

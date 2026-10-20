@@ -98,7 +98,9 @@ function formatEventDate(date: IsoDate): string {
 export default function ActivityScreen() {
   const { session, isLoading: authLoading, refreshAccessToken } = useAuth();
   const authRef = useRef({ session, authLoading, refreshAccessToken });
-  authRef.current = { session, authLoading, refreshAccessToken };
+  useEffect(() => {
+    authRef.current = { session, authLoading, refreshAccessToken };
+  }, [session, authLoading, refreshAccessToken]);
   const scrollRef = useRef<ScrollView>(null);
   useWebScrollDiagnostics(scrollRef, 'activity');
   const [selectedFilter, setSelectedFilter] = useState<ActivityFilter>('All');
@@ -110,8 +112,9 @@ export default function ActivityScreen() {
   const [apiStatus, setApiStatus] = useState('');
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [apiRequestSucceeded, setApiRequestSucceeded] = useState(false);
+  const [showPreviewExamples, setShowPreviewExamples] = useState(false);
   const [retryAfterUntil, setRetryAfterUntil] = useState(0);
-  const [retryClock, setRetryClock] = useState(Date.now());
+  const [retryClock, setRetryClock] = useState(() => Date.now());
   const retryInFlight = useRef(false);
   const retryAfterSeconds = Math.max(0, Math.ceil((retryAfterUntil - retryClock) / 1000));
 
@@ -279,16 +282,12 @@ export default function ActivityScreen() {
             <Text style={styles.title}>Activity</Text>
             <Text style={styles.intro}>A closer look at the campaigns and signals you follow.</Text>
           </View>
-          <View style={styles.unreadBadge}><View style={styles.unreadDot} /><Text style={styles.unreadText}>{demoNotifications.filter((item) => item.unread).length} new</Text></View>
+          <View style={styles.unreadBadge}><View style={styles.unreadDot} /><Text style={styles.unreadText}>{visibleEvents.length} account updates</Text></View>
         </View>
-        <View style={styles.demoNote}><View style={styles.demoPip} /><Text style={styles.demoNoteText}>Sample activity · Illustrative events for preview only</Text></View>
         {apiStatus || pendingSyncCount > 0 ? <View style={styles.syncStatus}><Text style={styles.syncStatusText}>{apiStatus || `${pendingSyncCount} saved ${pendingSyncCount === 1 ? 'campaign is' : 'campaigns are'} waiting to sync.`}</Text>{session && isSignalApiConfigured() && <Pressable disabled={loading || retryAfterSeconds > 0} onPress={() => void retryApiAndPendingSubmissions()} accessibilityRole="button" accessibilityState={{ disabled: loading || retryAfterSeconds > 0 }}><Text style={styles.retryText}>{retryAfterSeconds > 0 ? `Retry in ${retryAfterSeconds}s` : loading ? 'Syncing…' : 'Retry sync'}</Text></Pressable>}</View> : null}
         {loading ? <Text style={styles.loadingText}>Loading account activity…</Text> : null}
         {localLoading ? <Text style={styles.loadingText}>Loading saved on-device activity…</Text> : null}
         {localError ? <View style={styles.errorState}><Text style={styles.errorText}>{localError}</Text></View> : null}
-        {!localLoading && !loading && !localError && apiRequestSucceeded && localAccountEvents.length === 0 && accountEvents.length === 0
-          ? <View style={styles.emptyState}><Text style={styles.emptyTitle}>No account activity yet</Text><Text style={styles.emptyDescription}>Submit a campaign to add activity to this account.</Text></View>
-          : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterList}>
           {filters.map((filter) => {
             const selected = selectedFilter === filter;
@@ -307,37 +306,32 @@ export default function ActivityScreen() {
         </ScrollView>
 
         <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>{selectedFilter === 'All' ? 'Recent activity' : selectedFilter}</Text>
-          <Text style={styles.count}>{visibleDemo.length + visibleEvents.length} updates</Text>
+          <Text style={styles.listTitle}>{selectedFilter === 'All' ? 'Account activity' : selectedFilter}</Text>
+          <Text style={styles.count}>{visibleEvents.length} updates</Text>
         </View>
-        {visibleDemo.length === 0 && visibleEvents.length === 0 ? <View style={styles.emptyState}><Text style={styles.emptyIcon}>✦</Text><Text style={styles.emptyTitle}>Nothing here just yet</Text><Text style={styles.emptyDescription}>When there is an update in {selectedFilter.toLowerCase()}, it will find a home here.</Text><Pressable onPress={() => router.push('/explore' as never)} accessibilityRole="button" style={styles.emptyAction}><Text style={styles.emptyActionText}>Explore campaigns  →</Text></Pressable></View> : null}
-        {(['Today', 'Yesterday', 'Earlier'] as const).map((day) => {
-          const items = visibleDemo.filter((item) => item.day === day);
-          const accountItems = day === 'Earlier' ? visibleEvents : [];
-          if (!items.length && !accountItems.length) return null;
-          return <View key={day} style={styles.dayGroup}>
-            <Text style={styles.dayLabel}>{day}</Text>
-            {items.map((item) => {
-              const campaign = item.campaignId ? campaignsById.get(item.campaignId) : undefined;
-              return <Pressable key={item.id} accessibilityRole={campaign ? 'button' : 'text'} disabled={!campaign} accessibilityLabel={`${item.title}${campaign ? `. Open ${campaign.title}` : ''}`} onPress={() => { if (campaign) router.push({ pathname: '/campaign/[id]', params: { id: item.campaignId! } } as never); }} style={({ pressed }) => [styles.notification, item.unread && styles.notificationUnread, pressed && styles.pressed]}>
-                <View style={[styles.iconBox, item.category === 'Contributions' && styles.iconWarm, item.category === 'Account' && styles.iconQuiet]}><Text style={styles.iconText}>{item.icon}</Text></View>
-                <View style={styles.notificationCopy}>
-                  <View style={styles.notificationTop}><Text style={styles.notificationTitle}>{item.title}</Text>{item.unread ? <View style={styles.itemUnreadDot} /> : null}</View>
-                  <Text style={styles.notificationDescription}>{item.description}</Text>
-                  {campaign ? <Text style={styles.campaignLabel}>{campaign.title}</Text> : null}
-                  {item.progress && campaign ? <View style={styles.progressBlock}><View style={styles.progressMeta}><Text style={styles.progressCaption}>FUNDING PROGRESS</Text><Text style={styles.progressAmount}>₹{campaign.raised.toLocaleString('en-IN')} of ₹{campaign.goal.toLocaleString('en-IN')}</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.min(100, Math.round(campaign.raised / campaign.goal * 100))}%` }]} /></View></View> : null}
-                  <Text style={styles.timeLabel}>{item.time}</Text>
-                </View>
-              </Pressable>;
-            })}
-            {accountItems.map((event) => {
+        {visibleEvents.length === 0 && !localLoading && !loading ? <View style={styles.emptyState}><Text style={styles.emptyIcon}>✦</Text><Text style={styles.emptyTitle}>{apiRequestSucceeded ? 'No account activity yet' : 'Account activity unavailable'}</Text><Text style={styles.emptyDescription}>{apiRequestSucceeded ? 'Submit a campaign to add activity to this account.' : 'Real account activity will appear here when SIGNAL can verify your session.'}</Text></View> : null}
+        {visibleEvents.length > 0 ? <View style={styles.dayGroup}>
+            <Text style={styles.dayLabel}>Account history</Text>
+            {visibleEvents.map((event) => {
               const campaign = campaignsById.get(event.campaignId);
               return <Pressable key={event.id} accessibilityRole={campaign ? 'button' : 'text'} disabled={!campaign} onPress={() => { if (event.campaignId) router.push({ pathname: '/campaign/[id]', params: { id: event.localOwnerId ? `local-${event.campaignId}` : event.source === 'api' ? `api-${event.campaignId}` : event.campaignId, ...(event.localOwnerId ? { owner: event.localOwnerId } : {}) } } as never); }} style={({ pressed }) => [styles.notification, pressed && styles.pressed]}>
                 <View style={styles.iconBox}><Text style={styles.iconText}>{event.marker}</Text></View><View style={styles.notificationCopy}><View style={styles.notificationTop}><Text style={styles.notificationTitle}>{event.title}</Text><Text style={styles.timeLabel}>{formatEventDate(event.date)}</Text></View><Text style={styles.notificationDescription}>{event.description}</Text><Text style={styles.sourceLabel}>{event.source === 'api' ? 'SIGNAL API' : event.source === 'recovered-device' ? 'Recovered from this device' : 'On this device'}</Text></View>
               </Pressable>;
             })}
-          </View>;
-        })}
+          </View> : null}
+        <View style={styles.previewSection}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showPreviewExamples }} onPress={() => setShowPreviewExamples((shown) => !shown)} style={styles.previewToggle}>
+            <View style={styles.previewCopy}><Text style={styles.previewTitle}>Preview examples</Text><Text style={styles.demoNoteText}>Illustrative sample events · never account activity</Text></View>
+            <Text style={styles.previewArrow}>{showPreviewExamples ? '−' : '+'}</Text>
+          </Pressable>
+          {showPreviewExamples ? <View style={styles.previewList}>{visibleDemo.map((item) => {
+            const campaign = item.campaignId ? campaignsById.get(item.campaignId) : undefined;
+            return <View key={item.id} style={styles.notification}>
+              <View style={styles.iconBox}><Text style={styles.iconText}>{item.icon}</Text></View>
+              <View style={styles.notificationCopy}><Text style={styles.notificationTitle}>{item.title}</Text><Text style={styles.notificationDescription}>{item.description}</Text>{campaign ? <Text style={styles.campaignLabel}>{campaign.title}</Text> : null}<Text style={styles.sourceLabel}>Illustrative preview · not a real event</Text></View>
+            </View>;
+          })}</View> : null}
+        </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Open account settings" onPress={() => router.push('/profile' as never)} style={({ pressed }) => [styles.preferences, pressed && styles.pressed]}><Text style={styles.preferencesIcon}>⚙</Text><View style={styles.preferencesCopy}><Text style={styles.preferencesTitle}>Account settings</Text><Text style={styles.preferencesDescription}>Manage your SIGNAL account</Text></View><Text style={styles.preferencesArrow}>›</Text></Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -422,6 +416,12 @@ const styles = StyleSheet.create({
   demoNote: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 17, marginBottom: 2 },
   demoPip: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.brown },
   demoNoteText: { color: C.muted, fontSize: 10, lineHeight: 15, letterSpacing: 0.2 },
+  previewSection: { marginTop: 28, borderTopWidth: 1, borderTopColor: C.line, borderBottomWidth: 1, borderBottomColor: C.line },
+  previewToggle: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 12 },
+  previewCopy: { flex: 1, gap: 4 },
+  previewTitle: { color: C.text, fontSize: 12, fontWeight: '700' },
+  previewArrow: { color: C.muted, fontSize: 20, paddingHorizontal: 8 },
+  previewList: { paddingBottom: 8, backgroundColor: C.surfaceSoft, borderRadius: 10 },
   syncStatus: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 9, marginTop: 10, borderRadius: 7, backgroundColor: C.surfaceSoft },
   syncStatusText: { flex: 1, color: C.muted, fontSize: 10, lineHeight: 15 },
   errorState: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, padding: 12, marginTop: 10, borderRadius: 7, backgroundColor: C.maroonLight },

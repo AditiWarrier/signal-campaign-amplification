@@ -59,6 +59,7 @@ function createSupabaseAuth({ url, publishableKey, fetchImpl = fetch }) {
   }
 
   return {
+    configured,
     inspectAccessToken,
     async verifyAccessToken(accessToken) {
       const user = await request('user', { accessToken }, 'GET');
@@ -113,6 +114,13 @@ function createAuthMiddleware(auth) {
       req.supabaseAccessToken = match[1];
       return next();
     } catch (error) {
+      if (error?.code === 'AUTH_UNAVAILABLE') {
+        return res.status(503).json({ error: {
+          code: 'AUTH_CONFIGURATION_UNAVAILABLE',
+          message: 'SIGNAL Auth is not configured on this server.',
+          diagnostic: 'auth_not_configured',
+        } });
+      }
       const rateLimited = error?.status === 429;
       const status = rateLimited ? 429 : Number.isInteger(error?.status) && error.status >= 500 ? error.status : 401;
       const category = rateLimited ? 'rate_limited' : status === 401 ? 'verification_failure' : 'verification_unavailable';
