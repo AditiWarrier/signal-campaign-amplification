@@ -10,6 +10,7 @@ import { useWebScrollDiagnostics } from '@/hooks/use-web-scroll-diagnostics';
 import { formatUsdMinor } from '@/data/funding';
 import { getSignalActivityWithRefresh, isSignalApiConfigured, syncCampaignSubmissionToApi, type SignalActivityEvent } from '@/data/signal-api';
 import { mergeAccountEvents, readLocalActivityEvents, type LocalActivityEvent } from '@/data/local-activity';
+import { filterActivityEvents, filterActivityNotifications } from '@/data/local-activity-core';
 import { readCampaignDraft, readCampaignSubmission, readCampaignSubmissions, writeCampaignDraft, writeCampaignSubmission } from '@/data/campaign-draft-storage';
 import { useAuth } from '@/auth/auth-context';
 
@@ -264,10 +265,9 @@ export default function ActivityScreen() {
 
   const allEvents = useMemo(() => mergeAccountEvents(localAccountEvents, accountEvents), [accountEvents, localAccountEvents]);
 
-  const visibleEvents = useMemo(() => allEvents
-    .filter((event) => selectedFilter === 'All' || selectedFilter === 'Account')
+  const visibleEvents = useMemo(() => filterActivityEvents(allEvents, selectedFilter)
     .sort((left, right) => right.date.localeCompare(left.date) || right.id.localeCompare(left.id)), [allEvents, selectedFilter]);
-  const visibleDemo = useMemo(() => demoNotifications.filter((item) => selectedFilter === 'All' || item.category === selectedFilter), [selectedFilter]);
+  const visibleDemo = useMemo(() => filterActivityNotifications(demoNotifications, selectedFilter), [selectedFilter]);
 
   const campaignsById = useMemo(() => new Map(discoveryCampaigns.map((campaign) => [campaign.id, campaign])), []);
 
@@ -362,7 +362,9 @@ function toLocalEvent(event: LocalActivityEvent, ownerId: string): ActivityEvent
         ? (recoveredAnonymous ? 'Recovered campaign submission' : 'Campaign submission saved')
         : 'Campaign activity',
     description: isContribution
-      ? `A simulated contribution${amount ? ` of ${amount}` : ''} was recorded for “${title}”. No payment was processed.`
+      ? recoveredAnonymous
+        ? `A simulated contribution${amount ? ` of ${amount}` : ''} was recorded on this device. Its account ownership could not be verified. No payment was processed.`
+        : `A simulated contribution${amount ? ` of ${amount}` : ''} was recorded for “${title}”. No payment was processed.`
       : recoveredAnonymous
         ? `${event.campaignTitle} · recovered from this device. The original account ownership could not be verified.`
         : `${event.campaignTitle} · saved on this device.`,

@@ -36,6 +36,19 @@ function mergeAccountEvents(localEvents, apiEvents) {
   return [...merged.values()];
 }
 
+function filterActivityEvents(events, category) {
+  if (category === 'All' || category === 'Account') return [...events];
+  if (category === 'Contributions') {
+    return events.filter((event) => event.kind === 'account-contribution' || event.eventType === 'contribution.simulated');
+  }
+  return [];
+}
+
+function filterActivityNotifications(notifications, category) {
+  if (category === 'Contributions') return [];
+  return notifications.filter((item) => category === 'All' || item.category === category);
+}
+
 function recoverArchivedContributionEvents(currentEvents, contributionsByCampaign, recoveredAt) {
   const knownIds = new Set(currentEvents.map((event) => event.metadata?.contributionId || event.id));
   const recovered = [];
@@ -68,4 +81,10 @@ function recoverArchivedContributionEvents(currentEvents, contributionsByCampaig
   return [...recovered, ...currentEvents];
 }
 
-module.exports = { recoverArchivedSubmissionEvents, recoverArchivedContributionEvents, mergeAccountEvents };
+module.exports = {
+  recoverArchivedSubmissionEvents,
+  recoverArchivedContributionEvents,
+  mergeAccountEvents,
+  filterActivityEvents,
+  filterActivityNotifications,
+};

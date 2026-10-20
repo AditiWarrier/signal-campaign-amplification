@@ -15,3 +15,7 @@ export function recoverArchivedContributionEvents(
 ): LocalActivityEvent[];
 
 export function mergeAccountEvents<T extends { eventType?: string; campaignId?: string; actionId?: string; source: string; id: string }>(localEvents: T[], apiEvents: T[]): T[];
+
+export function filterActivityEvents<T extends { kind?: string; eventType?: string }>(events: T[], category: string): T[];
+
+export function filterActivityNotifications<T extends { category: string }>(notifications: T[], category: string): T[];

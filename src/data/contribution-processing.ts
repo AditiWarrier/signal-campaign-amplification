@@ -6,6 +6,12 @@ import type { LocalDemoContribution } from '@/types/local-campaign';
 
 const activeProcesses = new Map<string, Promise<ContributionFlow>>();
 
+/** Returns null until auth restoration finishes; afterward, freezes this flow's event owner. */
+export function resolveContributionActivityOwner(authLoading: boolean, userId?: string): string | null {
+  if (authLoading) return null;
+  return userId || 'device-draft';
+}
+
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -54,25 +60,34 @@ export function processContributionFlow(
 
   const task = (async () => {
     if (!initialFlow.outcome) throw new Error('The checkout outcome is missing. Return to simulated checkout and choose an outcome.');
-    await writeContributionFlow(updateContributionFlow(initialFlow, { status: 'processing', error: undefined }));
+    const ownerId = initialFlow.activityOwnerId === undefined
+      ? userId || 'device-draft'
+      : initialFlow.activityOwnerId || 'device-draft';
+    const processing = updateContributionFlow(initialFlow, { status: 'processing', activityOwnerId: ownerId, error: undefined });
+    await writeContributionFlow(processing);
     await delay(800);
 
     if (initialFlow.outcome !== 'success') {
-      const terminal = updateContributionFlow(initialFlow, { status: initialFlow.outcome, contribution: undefined, error: undefined });
+      const terminal = updateContributionFlow(processing, { status: initialFlow.outcome, contribution: undefined, error: undefined });
       await writeContributionFlow(terminal);
       return terminal;
     }
 
     try {
       const contribution = await commitContribution(initialFlow, accessToken);
-      const terminal = updateContributionFlow(initialFlow, { status: 'success', contribution, error: undefined });
+      let terminal = updateContributionFlow(processing, { status: 'success', contribution, activityEventPending: true, error: undefined });
       await writeContributionFlow(terminal);
       try {
-        await recordLocalContribution(userId || 'device-draft', contribution, initialFlow.campaignTitle);
-      } catch { /* Preserve flow success even if activity record write fails */ }
+        await recordLocalContribution(ownerId, contribution, initialFlow.campaignTitle);
+        const activitySaved = updateContributionFlow(terminal, { activityEventPending: false });
+        try {
+          await writeContributionFlow(activitySaved);
+          terminal = activitySaved;
+        } catch { /* The event is idempotent; the persisted pending marker enables recovery. */ }
+      } catch { /* Keep success and the persisted pending marker so Activity can be retried. */ }
       return terminal;
     } catch (error) {
-      const failed = updateContributionFlow(initialFlow, {
+      const failed = updateContributionFlow(processing, {
         status: 'failed',
         contribution: undefined,
         error: error instanceof Error ? error.message : 'The demo contribution could not be confirmed.',
@@ -92,12 +107,17 @@ export async function retryContributionConfirmation(flowId: string, accessToken?
   const flow = await readContributionFlow(flowId);
   if (!flow) return null;
   if (flow.status === 'success' && flow.contribution) {
-    try {
-      await recordLocalContribution(userId || 'device-draft', flow.contribution, flow.campaignTitle);
-    } catch { /* Safe */ }
-    return flow;
+    if (!flow.activityEventPending) return flow;
+    const ownerId = flow.activityOwnerId === undefined ? 'device-draft' : flow.activityOwnerId || 'device-draft';
+    await recordLocalContribution(ownerId, flow.contribution, flow.campaignTitle);
+    const recovered = updateContributionFlow(flow, { activityEventPending: false });
+    await writeContributionFlow(recovered);
+    return recovered;
   }
-  const retry = updateContributionFlow(flow, { status: 'checkout', outcome: 'success', error: undefined });
+  const ownerId = flow.activityOwnerId === undefined
+    ? userId || 'device-draft'
+    : flow.activityOwnerId || 'device-draft';
+  const retry = updateContributionFlow(flow, { status: 'checkout', outcome: 'success', activityOwnerId: ownerId, error: undefined });
   await writeContributionFlow(retry);
-  return processContributionFlow(retry, accessToken, userId);
+  return processContributionFlow(retry, accessToken, ownerId);
 }

@@ -80,8 +80,13 @@ export default function HomeScreen() {
             </Pressable>
             <Text style={s.formalFooterDescription}>A little about SIGNAL and the work we do.</Text>
             <View style={s.formalFooterGroups}>
-              {footerGroups.map((group) => <View key={group.title} style={[s.formalFooterGroup, wideFooter ? s.formalFooterGroupWide : s.formalFooterGroupMobile]}>
-                <Text style={s.formalFooterGroupTitle}>{group.title}</Text>
+              {footerGroups.map((group) => {
+                const isHowItWorks = group.title === 'HOW IT WORKS';
+                const headingFocused = focusedFooterLink === group.title;
+                return <View key={group.title} style={[s.formalFooterGroup, wideFooter ? s.formalFooterGroupWide : s.formalFooterGroupMobile]}>
+                {isHowItWorks ? <Pressable accessibilityRole="link" onPress={() => router.push('/how-it-works' as never)} onFocus={() => setFocusedFooterLink(group.title)} onBlur={() => setFocusedFooterLink((current) => current === group.title ? null : current)} hitSlop={5} style={[s.formalFooterLinkCell, headingFocused && s.formalFooterLinkFocus]}>
+                  <Text style={[s.formalFooterGroupTitle, s.formalFooterLink, headingFocused && s.formalFooterLinkFocused]}>{group.title}</Text>
+                </Pressable> : <Text style={s.formalFooterGroupTitle}>{group.title}</Text>}
                 {group.links.map((item) => {
                   const isPlaceholder = !item.section && !item.route;
                   const focused = focusedFooterLink === item.label;
@@ -94,12 +99,15 @@ export default function HomeScreen() {
                       router.push({ pathname: '/information', params: { section: item.section } } as never);
                     } else if (item.route === '/create') {
                       router.push(session ? '/create' : '/login');
+                    } else if (item.route === '/how-it-works') {
+                      router.push({ pathname: '/how-it-works', params: item.anchor ? { section: item.anchor } : {} } as never);
                     } else if (item.route) {
                       router.push(item.route);
                     }
                   }} onFocus={() => setFocusedFooterLink(item.label)} onBlur={() => setFocusedFooterLink((current) => current === item.label ? null : current)} hitSlop={5} style={[s.formalFooterLinkCell, focused && s.formalFooterLinkFocus]}>{label}</Pressable>;
                 })}
-              </View>)}
+              </View>;
+              })}
             </View>
           </View>
         </View>
@@ -114,12 +122,13 @@ export default function HomeScreen() {
 type FooterGroupLink = {
   label: string;
   section?: string;
-  route?: '/explore' | '/create';
+  route?: '/explore' | '/create' | '/how-it-works';
+  anchor?: string;
 };
 
 const footerGroups: { title: string; links: FooterGroupLink[] }[] = [
   { title: 'PLATFORM', links: [{ label: 'Explore Campaigns', route: '/explore' }, { label: 'Start a Campaign', route: '/create' }] },
-  { title: 'HOW IT WORKS', links: [{ label: 'Review Process' }, { label: 'Evaluation' }, { label: 'FAQ' }] },
+  { title: 'HOW IT WORKS', links: [{ label: 'Review Process', route: '/how-it-works', anchor: 'review-process' }, { label: 'Evaluation', route: '/how-it-works', anchor: 'evaluation' }, { label: 'FAQ', route: '/how-it-works', anchor: 'faq' }] },
   { title: 'LEGAL', links: [{ label: 'Terms', section: 'terms' }, { label: 'Privacy', section: 'privacy' }, { label: 'Contact', section: 'contact' }] },
   { title: 'SUPPORT', links: [{ label: 'Partners', section: 'partners' }, { label: 'Help', section: 'help' }, { label: 'Community Guidelines', section: 'community-guidelines' }] },
 ];

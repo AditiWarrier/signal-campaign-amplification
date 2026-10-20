@@ -5,7 +5,6 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Palette as C } from '@/constants/theme';
-import { HomeHeader } from '@/components/home/home-header';
 import {
   discoveryCampaigns,
   discoveryCategories,
@@ -205,7 +204,6 @@ export default function ExploreScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator>
-        <HomeHeader menuOnly />
         <Text style={styles.title}>Explore Campaigns</Text>
         <Text style={styles.intro}>Discover campaigns worth amplifying.</Text>
 

@@ -25,6 +25,10 @@ export type ContributionFlow = {
   status: ContributionFlowStatus;
   outcome?: ContributionOutcome;
   contribution?: LocalDemoContribution;
+  /** Activity ownership is captured after auth restoration and retained for safe recovery. */
+  activityOwnerId?: string | null;
+  /** A successful contribution remains successful while its Activity event is retried. */
+  activityEventPending?: boolean;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +79,8 @@ export function isContributionFlow(value: unknown): value is ContributionFlow {
     && typeof item.showFirstName === 'boolean'
     && (!item.showFirstName || (typeof item.firstName === 'string' && item.firstName.trim().length > 0 && item.firstName.length <= 40))
     && ['review', 'checkout', 'processing', 'success', 'rejected', 'failed', 'cancelled'].includes(String(item.status))
+    && (item.activityOwnerId === undefined || item.activityOwnerId === null || (typeof item.activityOwnerId === 'string' && item.activityOwnerId.length <= 128))
+    && (item.activityEventPending === undefined || typeof item.activityEventPending === 'boolean')
     && typeof item.createdAt === 'string'
     && typeof item.updatedAt === 'string';
 }

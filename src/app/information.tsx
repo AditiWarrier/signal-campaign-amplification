@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { Image } from 'expo-image';
 import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -74,6 +75,11 @@ export default function InformationScreen() {
   const sectionOffsets = useRef<Record<string, number>>({});
   const activeSection = informationSections.find((item) => item.id === section) ?? informationSections[0];
 
+  const scrollToStory = () => {
+    const offset = sectionOffsets.current['our-story'];
+    if (offset !== undefined) scrollRef.current?.scrollTo({ y: offset, animated: true });
+  };
+
   useEffect(() => {
     const offset = sectionOffsets.current[activeSection.id];
     if (offset !== undefined) scrollRef.current?.scrollTo({ y: offset, animated: false });
@@ -94,32 +100,72 @@ export default function InformationScreen() {
             sectionOffsets.current.about = offset;
             if (activeSection.id === 'about') scrollRef.current?.scrollTo({ y: offset, animated: false });
           }}
-          style={[styles.contentColumn, styles.aboutHeading]}>
-          <Text accessibilityRole="header" nativeID="about-heading" style={styles.sectionTitle}>ABOUT SIGNAL</Text>
-        </View>
-
-        <AboutFeatures />
-
-        <View style={styles.aboutCopyColumn}>
-          <Text style={styles.sectionCopy}>{informationSections[0].paragraphs[0]}</Text>
-        </View>
-
-        {informationSections.slice(1).map((item) => (
-          <View
-            key={item.id}
-            nativeID={item.id}
-            onLayout={(event) => {
-              const offset = event.nativeEvent.layout.y;
-              sectionOffsets.current[item.id] = offset;
-              if (item.id === activeSection.id) scrollRef.current?.scrollTo({ y: offset, animated: false });
-            }}
-            style={[styles.section, styles.contentColumn, styles.separatedSection]}>
-            <Text accessibilityRole="header" nativeID={`${item.id}-heading`} style={styles.sectionTitle}>{item.title}</Text>
-            {item.paragraphs.map((paragraph, paragraphIndex) => (
-              <Text key={paragraphIndex} style={[styles.sectionCopy, paragraphIndex > 0 && styles.followingParagraph]}>{paragraph}</Text>
-            ))}
+          style={styles.aboutWrap}>
+          <View style={styles.contentColumn}>
+            <View style={styles.aboutMasthead}>
+              <Text style={styles.brand}>SIGNAL</Text>
+              <Text style={styles.aboutKicker}>ABOUT / 01</Text>
+            </View>
+            <View style={styles.aboutHero}>
+              <View style={styles.heroTextColumn}>
+                <Text accessibilityRole="header" nativeID="about-heading" style={styles.heroTitle}>Why We{ '\n' }Exist.</Text>
+                <Text style={styles.heroIntro}>The world doesn’t lack people who care. It lacks ways for their voices to reach the people who can act.</Text>
+                <Pressable accessibilityRole="link" onPress={scrollToStory} style={styles.storyLink}>
+                  <Text style={styles.storyLinkText}>OUR STORY  ↘</Text>
+                </Pressable>
+              </View>
+              <View style={styles.heroImageCard}>
+                <Image source={require('@/assets/images/stories/library-sharing.png')} style={styles.heroImage} contentFit="cover" contentPosition="center" accessibilityLabel="Children reading together around a book in a library" />
+                <View style={styles.imageCaptionScrim}>
+                  <Text style={styles.imageCaption}>A voice deserves a way forward.</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.aboutDivider} />
+            <View
+              nativeID="our-story"
+              onLayout={(event) => { sectionOffsets.current['our-story'] = event.nativeEvent.layout.y; }}
+              style={styles.storyRows}>
+              <AboutStoryRow number="01" title="Our purpose">
+                SIGNAL helps people discover campaigns and come together to fund the distribution of campaign messages.
+              </AboutStoryRow>
+              <AboutStoryRow number="02" title="What contributions support">
+                Contributions are intended to support amplification so a message can reach a wider audience; they are not direct charitable donations to the cause named in a campaign.
+              </AboutStoryRow>
+            </View>
           </View>
-        ))}
+        </View>
+
+        {informationSections.slice(1).map((item) => {
+          const isCard = item.id === 'partners' || item.id === 'contact';
+          return (
+            <View
+              key={item.id}
+              nativeID={item.id}
+              onLayout={(event) => {
+                const offset = event.nativeEvent.layout.y;
+                sectionOffsets.current[item.id] = offset;
+                if (item.id === activeSection.id) scrollRef.current?.scrollTo({ y: offset, animated: false });
+              }}>
+              {isCard ? <View style={styles.cardDividerWrap}><View style={styles.cardDivider} /></View> : null}
+              <View style={isCard ? styles.cardSectionOuter : undefined}>
+                <View style={[styles.section, isCard ? styles.cardSection : styles.contentColumn, !isCard && item.id !== 'help' && item.id !== 'community-guidelines' && styles.separatedSection, item.id === 'partners' && styles.partnersCard, item.id === 'contact' && styles.contactCard]}>
+                  <Text accessibilityRole="header" nativeID={`${item.id}-heading`} style={[styles.sectionTitle, item.id === 'partners' && styles.partnerTitle]}>{item.title}</Text>
+                  {item.id === 'contact' ? <View style={styles.contactDetails}>
+                    <ContactDetail label="Email" value="hello@signal-demo.example" />
+                    <ContactDetail label="Phone" value="+1 (555) 010-2026" />
+                    <ContactDetail label="Address" value="123 Demo Street, Sample City" />
+                    <Text style={styles.contactPlaceholder}>These are fictional placeholders for demonstration purposes only and are not real contact information.</Text>
+                    {item.paragraphs.map((paragraph, paragraphIndex) => <Text key={paragraphIndex} style={[styles.sectionCopy, styles.contactNote, paragraphIndex > 0 && styles.followingParagraph]}>{paragraph}</Text>)}
+                  </View> : item.paragraphs.map((paragraph, paragraphIndex) => (
+                    <Text key={paragraphIndex} style={[styles.sectionCopy, item.id === 'partners' && styles.partnerCopy, paragraphIndex > 0 && styles.followingParagraph]}>{paragraph}</Text>
+                  ))}
+                </View>
+              </View>
+              {isCard ? <View style={styles.cardDividerWrap}><View style={styles.cardDivider} /></View> : null}
+            </View>
+          );
+        })}
         <View style={styles.taglineWrap}>
           <Text style={styles.tagline}>Small signals. Wider circles.</Text>
         </View>
@@ -128,80 +174,20 @@ export default function InformationScreen() {
   );
 }
 
-function AboutFeatures() {
+function AboutStoryRow({ number, title, children }: { number: string; title: string; children: string }) {
   return (
-    <View>
-      <View style={[styles.featureSection, styles.reportSection]}>
-        <View accessible accessibilityLabel="Illustration of a report showing distribution progress" style={styles.featureContent}>
-          <View style={styles.illustrationFrame}>
-            <View style={styles.reportPage}>
-              <View style={styles.reportHeadingLine} />
-              <View style={styles.reportLine} />
-              <View style={styles.reportChart}>
-                <View style={styles.reportBarShort} />
-                <View style={styles.reportBarMedium} />
-                <View style={styles.reportBarTall} />
-                <View style={styles.reportBarMedium} />
-              </View>
-            </View>
-          </View>
-          <View style={styles.featureCopy}>
-            <Text accessibilityRole="header" style={styles.featureTitle}>Transparent Amplification</Text>
-            <Text style={styles.featureDescription}>Understand what campaign funding supports and how distribution progress is reported.</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.featureSection, styles.reachSection]}>
-        <View accessible accessibilityLabel="Illustration of a megaphone" style={styles.featureContent}>
-          <View style={styles.illustrationFrame}>
-            <View style={styles.megaphone}>
-              <View style={styles.megaphoneGrip} />
-              <View style={styles.megaphoneCone} />
-              <View style={styles.megaphoneHandle} />
-              <View style={styles.megaphoneWaveSmall} />
-              <View style={styles.megaphoneWaveLarge} />
-            </View>
-          </View>
-          <View style={styles.featureCopy}>
-            <Text accessibilityRole="header" style={styles.featureTitle}>Wider Reach</Text>
-            <Text style={styles.featureDescription}>Help meaningful campaign messages reach audiences beyond their existing networks.</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.featureSection, styles.impactSection]}>
-        <View accessible accessibilityLabel="Illustration of a community group" style={styles.featureContent}>
-          <View style={[styles.illustrationFrame, styles.peopleIllustration]}>
-            <View style={styles.personSide}>
-              <View style={styles.personHead} />
-              <View style={styles.personBody} />
-            </View>
-            <View style={[styles.personSide, styles.personTall]}>
-              <View style={styles.personHead} />
-              <View style={styles.personBody} />
-            </View>
-            <View style={[styles.personSide, styles.personCenter]}>
-              <View style={[styles.personHead, styles.personHeadCenter]} />
-              <View style={[styles.personBody, styles.personBodyCenter]} />
-            </View>
-            <View style={[styles.personSide, styles.personTall]}>
-              <View style={styles.personHead} />
-              <View style={styles.personBody} />
-            </View>
-            <View style={styles.personSide}>
-              <View style={styles.personHead} />
-              <View style={styles.personBody} />
-            </View>
-          </View>
-          <View style={styles.featureCopy}>
-            <Text accessibilityRole="header" style={styles.featureTitle}>Impact Creation</Text>
-            <Text style={styles.featureDescription}>Bring people together to help important messages reach more people.</Text>
-          </View>
-        </View>
+    <View style={styles.storyRow}>
+      <Text style={styles.storyNumber}>{number}</Text>
+      <View style={styles.storyText}>
+        <Text accessibilityRole="header" style={styles.storyTitle}>{title}</Text>
+        <Text style={styles.sectionCopy}>{children}</Text>
       </View>
     </View>
   );
+}
+
+function ContactDetail({ label, value }: { label: string; value: string }) {
+  return <View style={styles.contactDetailRow}><Text style={styles.contactLabel}>{label}</Text><Text style={styles.sectionCopy}>{value}</Text></View>;
 }
 
 const styles = StyleSheet.create({
@@ -210,43 +196,44 @@ const styles = StyleSheet.create({
   contentColumn: { width: '100%', maxWidth: 680, paddingHorizontal: 22, alignSelf: 'center' },
   backButton: { alignSelf: 'flex-start', minHeight: 42, justifyContent: 'center', paddingRight: 14, marginBottom: 2 },
   backText: { color: Signal.forest, fontFamily: SignalFonts.sans, fontSize: 13, fontWeight: '700' },
-  aboutHeading: { paddingTop: 12, paddingBottom: 14 },
-  aboutCopyColumn: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 22, paddingTop: 20, paddingBottom: 24 },
+  aboutWrap: { width: '100%', paddingTop: 12, paddingBottom: 20 },
+  aboutMasthead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Signal.hairline, paddingBottom: 11, marginBottom: 20 },
+  brand: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 15, lineHeight: 20, letterSpacing: 1.2, fontWeight: '700' },
+  aboutKicker: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 11, lineHeight: 16, letterSpacing: 1.1, fontWeight: '600' },
+  aboutHero: { width: '100%', flexDirection: 'row', alignItems: 'stretch', gap: 12 },
+  heroTextColumn: { flex: 1, minWidth: 0, justifyContent: 'flex-start' },
+  heroTitle: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 34, lineHeight: 37, fontWeight: '700', letterSpacing: -0.8, marginBottom: 20 },
+  heroIntro: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 21 },
+  storyLink: { alignSelf: 'flex-start', paddingVertical: 12, marginTop: 'auto' },
+  storyLinkText: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 11, lineHeight: 16, letterSpacing: 0.7, fontWeight: '600' },
+  heroImageCard: { width: '47%', minHeight: 294, borderRadius: 10, overflow: 'hidden', backgroundColor: Signal.paperDeep, position: 'relative' },
+  heroImage: { width: '100%', height: '100%', position: 'absolute', inset: 0 },
+  imageCaptionScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 13, paddingVertical: 14, backgroundColor: 'rgba(21, 24, 22, 0.66)' },
+  imageCaption: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  aboutDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#000000', marginTop: 20 },
+  storyRows: { paddingTop: 4 },
+  storyRow: { flexDirection: 'row', gap: 14, paddingVertical: 17, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Signal.hairline },
+  storyNumber: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 22, lineHeight: 28, minWidth: 36 },
+  storyText: { flex: 1, minWidth: 0 },
+  storyTitle: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 17, lineHeight: 23, fontWeight: '700', marginBottom: 7 },
   section: { paddingTop: 22, paddingBottom: 22 },
   separatedSection: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#000000' },
+  cardSectionOuter: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 18, marginTop: 14, marginBottom: 6 },
+  cardSection: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 18 },
+  cardDividerWrap: { width: '100%', maxWidth: 680, alignSelf: 'center', paddingHorizontal: 22, marginVertical: 14 },
+  cardDivider: { height: StyleSheet.hairlineWidth, backgroundColor: '#000000' },
+  partnersCard: { backgroundColor: Signal.maroon, borderRadius: 10 },
+  partnerTitle: { color: Signal.paper },
+  partnerCopy: { color: Signal.paper },
+  contactCard: { borderWidth: StyleSheet.hairlineWidth, borderColor: '#000000', borderRadius: 8 },
+  contactDetails: { gap: 12 },
+  contactDetailRow: { gap: 2 },
+  contactLabel: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 17, fontWeight: '700' },
+  contactPlaceholder: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 18, fontStyle: 'italic', marginTop: 2 },
+  contactNote: { marginTop: 2 },
   sectionTitle: { color: Signal.maroon, fontFamily: SignalFonts.sans, fontSize: 15, lineHeight: 21, fontWeight: '700', letterSpacing: 1.1, marginBottom: 8 },
   sectionCopy: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 22 },
   followingParagraph: { marginTop: 10 },
-  featureSection: { width: '100%', paddingHorizontal: 22, paddingVertical: 25 },
-  reportSection: { backgroundColor: Signal.paperDeep },
-  reachSection: { backgroundColor: Signal.paper },
-  impactSection: { backgroundColor: Signal.maroonLight },
-  featureContent: { width: '100%', maxWidth: 680, alignSelf: 'center', alignItems: 'center' },
-  illustrationFrame: { width: '100%', height: 150, alignItems: 'center', justifyContent: 'center' },
-  featureCopy: { width: '100%', maxWidth: 520, alignItems: 'center', marginTop: 9 },
-  featureTitle: { color: Signal.maroon, fontFamily: SignalFonts.sans, fontSize: 21, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
-  featureDescription: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 22, textAlign: 'center', marginTop: 6 },
-  reportPage: { width: 98, height: 122, borderWidth: 2, borderColor: Signal.forest, borderRadius: 7, backgroundColor: Signal.paper, paddingHorizontal: 11, paddingTop: 12, paddingBottom: 10 },
-  reportHeadingLine: { width: '68%', height: 4, borderRadius: 2, backgroundColor: Signal.maroon, marginBottom: 8 },
-  reportLine: { width: '88%', height: 3, borderRadius: 2, backgroundColor: Signal.forest, opacity: 0.45, marginBottom: 8 },
-  reportChart: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', borderBottomWidth: 2, borderBottomColor: Signal.forest },
-  reportBarShort: { width: 10, height: 19, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.forest },
-  reportBarMedium: { width: 10, height: 33, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.maroon },
-  reportBarTall: { width: 10, height: 48, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.forest },
-  megaphone: { width: 166, height: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  megaphoneGrip: { width: 14, height: 40, borderWidth: 4, borderColor: Signal.maroon, borderRightWidth: 0, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
-  megaphoneCone: { width: 0, height: 0, borderTopWidth: 42, borderBottomWidth: 42, borderLeftWidth: 76, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: Signal.forest },
-  megaphoneHandle: { position: 'absolute', width: 18, height: 31, left: 43, top: 65, borderWidth: 4, borderColor: Signal.maroon, borderTopWidth: 0, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
-  megaphoneWaveSmall: { width: 12, height: 30, marginLeft: 7, borderRightWidth: 4, borderColor: Signal.maroon, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 16 },
-  megaphoneWaveLarge: { position: 'absolute', right: -2, width: 20, height: 54, borderRightWidth: 4, borderColor: Signal.maroon, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 24 },
-  peopleIllustration: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 7 },
-  personSide: { width: 28, alignItems: 'center', gap: 7 },
-  personTall: { marginBottom: 8 },
-  personHead: { width: 22, height: 22, borderRadius: 11, backgroundColor: Signal.forest },
-  personBody: { width: 30, height: 44, borderWidth: 4, borderColor: Signal.forest, borderTopLeftRadius: 15, borderTopRightRadius: 15, borderBottomWidth: 0 },
-  personCenter: { width: 34 },
-  personHeadCenter: { width: 28, height: 28, borderRadius: 14, backgroundColor: Signal.maroon },
-  personBodyCenter: { width: 40, height: 56, borderColor: Signal.maroon, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   taglineWrap: { width: '100%', alignItems: 'center', paddingHorizontal: 22, marginTop: 25, marginBottom: 4 },
   tagline: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 13, lineHeight: 20, letterSpacing: 0.6, textAlign: 'center' },
 });

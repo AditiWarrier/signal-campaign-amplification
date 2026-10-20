@@ -5,7 +5,7 @@ import { Platform, Share, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/auth-context';
 import { CampaignIdentity, FlowButton, FlowCard, FlowLink, FlowPage, InfoNote, MoneyRow, formatContributionMoney } from '@/components/contributions/flow-ui';
-import { retryContributionConfirmation } from '@/data/contribution-processing';
+import { resolveContributionActivityOwner, retryContributionConfirmation } from '@/data/contribution-processing';
 import { loadContributionCampaign, type ContributionCampaign } from '@/data/contribution-campaign';
 import { readCampaignDemoContributions } from '@/data/demo-contributions';
 import { readContributionFlow, updateContributionFlow, writeContributionFlow, type ContributionFlow } from '@/data/contribution-flow';
@@ -16,7 +16,7 @@ import { Palette as C } from '@/constants/theme';
 
 export default function ContributionResultScreen() {
   const { flowId } = useLocalSearchParams<{ flowId: string }>();
-  const { user, session } = useAuth();
+  const { user, session, isLoading: authLoading } = useAuth();
   const [flow, setFlow] = useState<ContributionFlow | null>(null);
   const [campaign, setCampaign] = useState<ContributionCampaign | null>(null);
   const [raisedMinor, setRaisedMinor] = useState<number | null>(null);
@@ -90,12 +90,16 @@ export default function ContributionResultScreen() {
 
   async function retryConfirmation() {
     if (!flow || retrying) return;
+    if (flow.status !== 'success' && resolveContributionActivityOwner(authLoading, user?.id) === null) return;
     setRetrying(true); setError('');
     try {
-      const finalFlow = await retryContributionConfirmation(flow.id, session?.access_token, user?.id);
+      const ownerId = flow.status === 'success'
+        ? undefined
+        : resolveContributionActivityOwner(authLoading, user?.id) ?? undefined;
+      const finalFlow = await retryContributionConfirmation(flow.id, session?.access_token, ownerId);
       if (!finalFlow) throw new Error('The saved confirmation is unavailable.');
       setFlow(finalFlow);
-      if (finalFlow.status === 'success') {
+      if (finalFlow.status === 'success' && flow.status !== 'success') {
         setRaisedMinor(null);
         setProgressNote('Refresh this page to load the latest campaign total.');
       }
@@ -171,7 +175,11 @@ export default function ContributionResultScreen() {
               : 'The simulated flow did not produce a confirmed contribution.'}</Text>
         <InfoNote>No real payment was attempted or charged.</InfoNote>
       </FlowCard>
-      {flow.status === 'failed' && flow.outcome === 'success' ? <FlowButton title={retrying ? 'Checking confirmation…' : 'Retry confirmation'} disabled={retrying} onPress={() => { void retryConfirmation(); }} /> : null}
+      {flow.activityEventPending ? <FlowCard title="Activity update pending">
+        <Text style={styles.body}>Your contribution succeeded, but its Activity entry could not be saved yet.</Text>
+        <FlowButton title={retrying ? 'Saving activity…' : 'Retry Activity Update'} secondary disabled={retrying} onPress={() => { void retryConfirmation(); }} />
+      </FlowCard> : null}
+      {flow.status === 'failed' && flow.outcome === 'success' ? <FlowButton title={authLoading ? 'Restoring session…' : retrying ? 'Checking confirmation…' : 'Retry confirmation'} disabled={retrying || authLoading} onPress={() => { void retryConfirmation(); }} /> : null}
       {flow.status === 'rejected' || flow.status === 'failed' || flow.status === 'cancelled' ? <FlowButton title="Choose another demo outcome" onPress={() => { void restartCheckout(); }} /> : null}
       <FlowButton title="Return to campaign" secondary onPress={() => campaign && router.replace({ pathname: '/campaign/[id]', params: { id: campaign.routeId } } as never)} />
     </>}
