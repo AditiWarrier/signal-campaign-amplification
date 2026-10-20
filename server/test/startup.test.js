@@ -17,11 +17,11 @@ async function reservePort() {
   return port;
 }
 
-test('server/index.js startup serves the auth diagnostic contract in health and response headers', async (t) => {
+test('server/index.js honors Render PORT and serves the auth diagnostic health route', async (t) => {
   const projectRoot = path.resolve(__dirname, '../..');
   const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'signal-api-startup-'));
   const port = await reservePort();
-  const env = { ...process.env, SIGNAL_API_PORT: String(port), SIGNAL_DATA_FILE: path.join(temporaryDirectory, 'state.json'), NODE_ENV: 'test' };
+  const env = { ...process.env, PORT: String(port), SIGNAL_API_PORT: '1', SIGNAL_DATA_FILE: path.join(temporaryDirectory, 'state.json'), NODE_ENV: 'test' };
   for (const key of Object.keys(env)) {
     if (/SUPABASE|EXPO_PUBLIC/i.test(key)) delete env[key];
   }

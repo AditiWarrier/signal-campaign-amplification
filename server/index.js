@@ -9,8 +9,8 @@ const { createOpenAiCampaignSuggestions } = require('./ai-campaign-suggestions')
 loadProjectEnv();
 
 const projectRoot = path.resolve(__dirname, '..');
-const port = Number(process.env.SIGNAL_API_PORT || 4000);
-if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SIGNAL_API_PORT must be a valid TCP port.');
+const port = Number(process.env.PORT || process.env.SIGNAL_API_PORT || 4000);
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT or SIGNAL_API_PORT must be a valid TCP port.');
 
 const frontendSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.replace(/\/$/, '');
 const backendSupabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, '');
