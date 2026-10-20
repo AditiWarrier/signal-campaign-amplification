@@ -1,4 +1,4 @@
-import { normalizeLocalCampaignDraft, type LocalCampaignDraft } from '@/types/local-campaign';
+import { normalizeLocalCampaignDraft, type LocalCampaignDraft, type LocalDemoContribution } from '@/types/local-campaign';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_SIGNAL_API_URL?.replace(/\/$/, '');
 
@@ -56,6 +56,9 @@ function apiCampaignToLocal(value: unknown): LocalCampaignDraft | null {
     currentStep: 5,
     localStatus: item.status === 'draft' ? 'draft' : 'submitted_locally',
     apiSubmissionStatus: item.status === 'draft' ? undefined : 'submitted',
+    backendStatus: ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'completed', 'cancelled'].includes(String(item.status))
+      ? item.status as LocalCampaignDraft['backendStatus'] : undefined,
+    ownerId: typeof item.ownerId === 'string' ? item.ownerId : undefined,
     fundingGoal: asMoney(data.fundingGoalMinor),
     instagramBudget: asMoney(data.instagramBudgetMinor),
     facebookBudget: asMoney(data.facebookBudgetMinor),
@@ -83,9 +86,82 @@ export async function getCampaignFromApi(id: string, accessToken: string): Promi
   return apiCampaignToLocal(result.campaign);
 }
 
-export async function listSubmittedCampaignsFromApi(accessToken: string): Promise<Array<{
+function normalizeApiContribution(value: unknown): LocalDemoContribution | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  if (typeof item.id !== 'string' || typeof item.campaignId !== 'string' || !Number.isSafeInteger(item.amountMinor) || Number(item.amountMinor) <= 0) return null;
+  return {
+    id: item.id,
+    campaignId: item.campaignId,
+    amountMinor: Number(item.amountMinor),
+    currency: 'USD',
+    campaignAmountMinor: Number(item.amountMinor),
+    campaignCurrency: 'USD',
+    feeMinor: Number.isSafeInteger(item.feeMinor) ? Number(item.feeMinor) : 0,
+    totalMinor: Number.isSafeInteger(item.totalMinor) ? Number(item.totalMinor) : Number(item.amountMinor),
+    showFirstName: typeof item.displayFirstName === 'string' && item.displayFirstName.length > 0,
+    displayFirstName: typeof item.displayFirstName === 'string' ? item.displayFirstName : null,
+    status: 'simulated',
+    contributorId: typeof item.contributorId === 'string' ? item.contributorId : undefined,
+    idempotencyKey: typeof item.idempotencyKey === 'string' ? item.idempotencyKey : '',
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : '',
+  };
+}
+
+async function contributionRequest(path: string, accessToken: string, method: 'GET' | 'POST', body?: unknown): Promise<Record<string, unknown>> {
+  if (!API_BASE_URL) throw new Error('SIGNAL API URL is not configured.');
+  let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${accessToken}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error('The SIGNAL API could not be reached or confirm the request. Retry uses the same demo reference.');
+  } finally {
+    clearTimeout(timeout);
+  }
+  const result = await response.json().catch(() => ({})) as Record<string, unknown>;
+  if (!response.ok) {
+    const error = result.error as Record<string, unknown> | undefined;
+    throw new Error(typeof error?.message === 'string' ? error.message : 'The simulated contribution could not be recorded.');
+  }
+  return result;
+}
+
+export async function createDemoContributionFromApi(
+  campaignId: string,
+  amountMinor: number,
+  idempotencyKey: string,
+  accessToken: string,
+  displayFirstName?: string,
+): Promise<LocalDemoContribution> {
+  const result = await contributionRequest('/api/demo/contributions', accessToken, 'POST', {
+    campaignId, amountMinor, currency: 'USD', idempotencyKey,
+    showFirstName: Boolean(displayFirstName),
+    ...(displayFirstName ? { firstName: displayFirstName } : {}),
+  });
+  const contribution = normalizeApiContribution(result.contribution);
+  if (!contribution) throw new Error('The SIGNAL API did not confirm a valid simulated contribution.');
+  return contribution;
+}
+
+export async function listDemoContributionsFromApi(campaignId: string, accessToken: string): Promise<LocalDemoContribution[]> {
+  const result = await contributionRequest(`/api/campaigns/${encodeURIComponent(campaignId)}/contributions`, accessToken, 'GET');
+  if (!Array.isArray(result.records)) throw new Error('The SIGNAL API returned an invalid contribution list.');
+  return result.records.flatMap((value) => {
+    const item = normalizeApiContribution(value);
+    return item ? [{ ...item, campaignId }] : [];
+  });
+}
+
+export async function listSubmittedCampaignsFromApi(accessToken: string): Promise<{
   id: string; title: string; category: string; creatorName: string; submittedAt: string; apiSubmissionStatus: 'submitted';
-}>> {
+}[]> {
   const result = await getApiCampaignResponse('/api/campaigns?mine=true', accessToken);
   if (!Array.isArray(result.campaigns)) throw new Error('The SIGNAL API returned an invalid campaign list.');
   return result.campaigns.flatMap((value) => {
@@ -188,7 +264,7 @@ export async function listCampaignDraftsFromApi(accessToken: string): Promise<Lo
   } catch {
     throw new Error('The SIGNAL API could not be reached.');
   }
-  const result = await response.json().catch(() => ({})) as { drafts?: Array<{ id?: unknown; data?: unknown; updatedAt?: unknown }> };
+  const result = await response.json().catch(() => ({})) as { drafts?: { id?: unknown; data?: unknown; updatedAt?: unknown }[] };
   if (!response.ok || !Array.isArray(result.drafts)) throw new Error('Saved backend drafts could not be loaded.');
   return [...result.drafts].sort((left, right) => String(right.updatedAt ?? '').localeCompare(String(left.updatedAt ?? ''))).flatMap((item) => {
     if (typeof item.id !== 'string' || !item.data || typeof item.data !== 'object') return [];

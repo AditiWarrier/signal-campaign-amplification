@@ -26,7 +26,7 @@ function HamburgerIcon({ open }: { open: boolean }) {
   );
 }
 
-export function HomeHeader() {
+export function HomeHeader({ menuOnly = false }: { menuOnly?: boolean }) {
   const { session } = useAuth();
   const signedIn = Boolean(session);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -38,16 +38,16 @@ export function HomeHeader() {
 
   return (
     <View style={styles.header}>
-      <Text style={styles.wordmark} accessibilityRole="header">SIGNAL</Text>
+      {menuOnly ? <View style={styles.headerSpacer} /> : <Text style={styles.wordmark} accessibilityRole="header">SIGNAL</Text>}
       <View style={styles.actions}>
-        <Pressable
+        {!menuOnly && <Pressable
           accessibilityRole="button"
           accessibilityLabel={signedIn ? 'Open your profile' : 'Sign in or log in'}
           onPress={() => router.push(signedIn ? '/profile' : '/login')}
           hitSlop={6}
           style={({ pressed }) => [styles.signIn, pressed && styles.pressed]}>
           <Text style={styles.signInText}>{signedIn ? 'Account' : 'Sign in'}</Text>
-        </Pressable>
+        </Pressable>}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open navigation menu"
@@ -111,6 +111,7 @@ export function HomeHeader() {
 
 const styles = StyleSheet.create({
   header: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerSpacer: { flex: 1 },
   wordmark: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: 5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   signIn: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },

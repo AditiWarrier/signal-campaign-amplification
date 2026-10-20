@@ -23,7 +23,7 @@ const styles = StyleSheet.create({
   eyebrow: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, ...SignalType.eyebrow },
   heading: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 17, lineHeight: 23, fontWeight: '700', marginTop: 8 },
   figureRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 14 },
-  figure: { color: Signal.lake, fontFamily: SignalFonts.display, fontSize: 56, lineHeight: 60 },
+  figure: { color: '#2A5B7C', fontFamily: SignalFonts.display, fontSize: 56, lineHeight: 60 },
   figureLabel: { color: Signal.ink, fontFamily: SignalFonts.sans, ...SignalType.small },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: Signal.ink, marginTop: 16, marginBottom: 12 },
   description: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, ...SignalType.small },

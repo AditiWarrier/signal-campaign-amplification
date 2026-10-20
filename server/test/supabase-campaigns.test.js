@@ -79,3 +79,22 @@ test('submission requires a committed non-draft campaign result', async () => {
     return true;
   });
 });
+
+test('demo contribution RPC receives only the validated amount, idempotency key, and opted-in first name', async () => {
+  let captured;
+  const campaigns = createSupabaseCampaigns({
+    url: 'https://project.example.test', publishableKey: 'publishable-test-key',
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return { ok: true, json: async () => ({ id: 'demo-record-1', campaignId: 'campaign-1', amountMinor: 500, feeMinor: 0, totalMinor: 500, displayFirstName: 'Asha', currency: 'USD', status: 'simulated', idempotencyKey: 'signal-demo-1', createdAt: '2026-10-20T00:00:00Z' }) };
+    },
+  });
+  const result = await campaigns.createDemoContribution('campaign-1', 500, 'signal-demo-1', 'supporter-token', 'Asha');
+  assert.equal(captured.url, 'https://project.example.test/rest/v1/rpc/signal_api_create_demo_contribution');
+  assert.deepEqual(JSON.parse(captured.options.body), {
+    p_campaign_client_id: 'campaign-1', p_amount_minor: 500,
+    p_idempotency_key: 'signal-demo-1', p_display_first_name: 'Asha',
+  });
+  assert.equal(result.displayFirstName, 'Asha');
+  assert.equal(result.totalMinor, 500);
+});

@@ -139,11 +139,22 @@ function validateIdempotency(value) {
 
 function validateDemoContribution(body) {
   if (!isPlainObject(body)) throw apiError(400, 'VALIDATION_ERROR', 'Contribution data must be an object.');
+  const campaignId = str(body.campaignId, 100, 'Campaign ID', true).trim();
+  if (!/^[A-Za-z0-9._:-]+$/.test(campaignId)) throw apiError(400, 'VALIDATION_ERROR', 'Campaign ID contains unsupported characters.');
   if (!Number.isSafeInteger(body.amountMinor) || body.amountMinor < 100 || body.amountMinor > 100000) {
     throw apiError(400, 'VALIDATION_ERROR', 'Demo contributions must be between 100 and 100000 USD cents.');
   }
   if (body.currency !== 'USD') throw apiError(400, 'VALIDATION_ERROR', 'This demo supports USD only.');
-  return { amountMinor: body.amountMinor, currency: 'USD', idempotencyKey: validateIdempotency(body.idempotencyKey) };
+  if (body.showFirstName !== undefined && typeof body.showFirstName !== 'boolean') throw apiError(400, 'VALIDATION_ERROR', 'The first-name display preference must be true or false.');
+  const showFirstName = body.showFirstName === true;
+  let firstName = null;
+  if (showFirstName) {
+    if (typeof body.firstName !== 'string' || !body.firstName.trim() || body.firstName.trim().length > 40 || /[\r\n]/.test(body.firstName)) {
+      throw apiError(400, 'VALIDATION_ERROR', 'Enter a first name of up to 40 characters or turn off the display preference.');
+    }
+    firstName = body.firstName.trim().split(/\s+/)[0];
+  }
+  return { campaignId, amountMinor: body.amountMinor, currency: 'USD', idempotencyKey: validateIdempotency(body.idempotencyKey), firstName };
 }
 
 function validateStoredCampaignForSubmission(data, policyAccepted) {
@@ -431,16 +442,19 @@ function createApp({ store, campaigns, auth, authMiddleware, authService } = {})
   app.post('/api/demo/contributions', authenticate, async (req, res) => {
     const input = validateDemoContribution(req.body);
     if (campaigns) {
-      const contribution = await campaigns.createDemoContribution(req.body.campaignId, input.amountMinor, input.idempotencyKey, req.supabaseAccessToken);
+      const contribution = await campaigns.createDemoContribution(input.campaignId, input.amountMinor, input.idempotencyKey, req.supabaseAccessToken, input.firstName);
       return res.status(201).json({ contribution, simulated: true, actualPaymentProcessed: false });
     }
     const campaign = await store.update((state) => {
-      const item = state.campaigns.find((candidate) => candidate.id === req.body.campaignId);
+      const item = state.campaigns.find((candidate) => candidate.id === input.campaignId);
       if (!item || item.status !== 'approved') throw apiError(404, 'CAMPAIGN_UNAVAILABLE', 'Only approved campaigns can accept demo contributions.');
       if (item.ownerId === req.auth.id) throw apiError(403, 'SELF_CONTRIBUTION_BLOCKED', 'Creators cannot contribute to their own campaign.');
       let contribution = state.demoContributions.find((record) => record.contributorId === req.auth.id && record.campaignId === item.id && record.idempotencyKey === input.idempotencyKey);
+      if (contribution && (contribution.amountMinor !== input.amountMinor || (contribution.displayFirstName || null) !== input.firstName)) {
+        throw apiError(409, 'IDEMPOTENCY_CONFLICT', 'The idempotency key was already used for a different contribution.');
+      }
       if (!contribution) {
-        contribution = { id: randomUUID(), campaignId: item.id, contributorId: req.auth.id, amountMinor: input.amountMinor, currency: input.currency, status: 'simulated', idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() };
+        contribution = { id: randomUUID(), campaignId: item.id, contributorId: req.auth.id, amountMinor: input.amountMinor, feeMinor: 0, totalMinor: input.amountMinor, displayFirstName: input.firstName, currency: input.currency, status: 'simulated', idempotencyKey: input.idempotencyKey, createdAt: new Date().toISOString() };
         state.demoContributions.push(contribution);
         addActivity(state, req.auth.id, item.id, 'contribution.simulated', { contributionId: contribution.id, amountMinor: contribution.amountMinor, currency: contribution.currency });
         addActivity(state, item.ownerId, item.id, 'contribution.simulated', { contributionId: contribution.id, amountMinor: contribution.amountMinor, currency: contribution.currency });

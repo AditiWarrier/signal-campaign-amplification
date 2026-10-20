@@ -117,11 +117,12 @@ function createSupabaseCampaigns({ url, publishableKey, fetchImpl = fetch }) {
       const result = row(await rpc('signal_api_review_campaign', accessToken, { p_client_id: clientId, p_status: status, p_feedback: feedback }));
       return asCampaign(result);
     },
-    async createDemoContribution(campaignId, amountMinor, idempotencyKey, accessToken) {
+    async createDemoContribution(campaignId, amountMinor, idempotencyKey, accessToken, firstName = null) {
       return rpc('signal_api_create_demo_contribution', accessToken, {
         p_campaign_client_id: campaignId,
         p_amount_minor: amountMinor,
         p_idempotency_key: idempotencyKey,
+        p_display_first_name: firstName,
       });
     },
     async listDemoContributions(campaignId, contributorId, accessToken) {
@@ -159,6 +160,12 @@ function asDemoContribution(row) {
     contributorId: row.contributor_id,
     amountMinor: Number(row.amount_minor),
     currency: row.currency,
+    campaignAmountMinor: Number(row.amount_minor),
+    campaignCurrency: row.currency,
+    feeMinor: Number(row.fee_minor || 0),
+    totalMinor: Number(row.total_minor || row.amount_minor),
+    displayFirstName: row.display_first_name || null,
+    showFirstName: Boolean(row.display_first_name),
     status: 'simulated',
     idempotencyKey: row.idempotency_key,
     createdAt: row.created_at,

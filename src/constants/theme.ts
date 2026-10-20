@@ -9,30 +9,30 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#F0DFC7',
-    background: '#74563F',
-    backgroundElement: '#86694F',
-    backgroundSelected: '#C4A17B',
-    textSecondary: '#E2C9A9',
-    line: '#9B7B5E',
-    brown: '#C4A17B',
-    brownLight: '#957657',
-    green: '#9EAD91',
-    red: '#F0AA91',
-    espresso: '#302A25',
+    text: '#292B24',
+    background: '#F5F1E8',
+    backgroundElement: '#EEE8DC',
+    backgroundSelected: '#DCE2D2',
+    textSecondary: '#64675D',
+    line: '#D8D2C5',
+    brown: '#586544',
+    brownLight: '#DCE2D2',
+    green: '#586544',
+    red: '#743C4F',
+    espresso: '#292B24',
   },
   dark: {
-    text: '#F0DFC7',
-    background: '#74563F',
-    backgroundElement: '#86694F',
-    backgroundSelected: '#C4A17B',
-    textSecondary: '#E2C9A9',
-    line: '#9B7B5E',
-    brown: '#C4A17B',
-    brownLight: '#957657',
-    green: '#9EAD91',
-    red: '#F0AA91',
-    espresso: '#302A25',
+    text: '#292B24',
+    background: '#F5F1E8',
+    backgroundElement: '#EEE8DC',
+    backgroundSelected: '#DCE2D2',
+    textSecondary: '#64675D',
+    line: '#D8D2C5',
+    brown: '#586544',
+    brownLight: '#DCE2D2',
+    green: '#586544',
+    red: '#743C4F',
+    espresso: '#292B24',
   },
 } as const;
 
@@ -48,8 +48,12 @@ export const Palette = {
   green: Colors.light.green,
   red: Colors.light.red,
   surface: Colors.light.backgroundElement,
-  surfaceSoft: '#7D6047',
-  placeholder: '#F0DFC7',
+  surfaceSoft: '#EEE8DC',
+  backgroundSelected: Colors.light.backgroundSelected,
+  placeholder: Colors.light.textSecondary,
+  maroon: '#743C4F',
+  maroonLight: '#F0E7EA',
+  error: '#743C4F',
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
@@ -90,26 +94,28 @@ export const Spacing = {
 } as const;
 
 /**
- * SIGNAL refresh palette (v0/ui-refresh). Warm paper background, near-black ink,
- * forest green and lake blue accents, sun yellow used sparingly.
- * Applied to Home first; other screens still use `Colors`/`Palette` until migrated.
+ * SIGNAL shared visual identity. Home's charcoal campaign section remains a
+ * deliberate section treatment; other colors use paper, olive, and selective mauve.
  */
 export const Signal = {
-  paper: '#F5F0E6',
-  paperDeep: '#ECE4D4',
-  ink: '#1C211D',
-  inkSoft: '#4A5048',
-  hairline: '#D8CFBD',
-  forest: '#2E5B3C',
-  forestDeep: '#21452D',
-  lake: '#2A5B7C',
-  sun: '#E2AE3A',
-  onDark: '#F8F4EA',
+  paper: '#F5F1E8',
+  paperDeep: '#EEE8DC',
+  ink: '#292B24',
+  inkSoft: '#64675D',
+  hairline: '#D8D2C5',
+  forest: '#586544',
+  forestDeep: '#414B33',
+  lake: '#586544',
+  sun: '#586544',
+  onDark: '#F5F1E8',
   scrim: '#0E130F',
   charcoal: '#151816',
   charcoalLine: '#2C312D',
-  onDarkSoft: '#B9BDB4',
-  butter: '#F6EECB',
+  onDarkSoft: '#C7C9C0',
+  butter: '#EEE8DC',
+  maroon: '#743C4F',
+  maroonLight: '#F0E7EA',
+  oliveLight: '#DCE2D2',
 } as const;
 
 export const SignalFonts = {

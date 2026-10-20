@@ -1,5 +1,5 @@
 .expoLogoBackground {
-  background-image: linear-gradient(180deg, #c4a17b, #86694f);
+  background-color: var(--signal-olive);
   border-radius: 40px;
   width: 128px;
   height: 128px;

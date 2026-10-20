@@ -35,3 +35,9 @@ export function formatUsdMinor(value: number): string {
   return `${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
     .format(minor / 100)} USD`;
 }
+
+export function formatInrMinor(value: number): string {
+  const minor = safeMinor(value);
+  return `${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    .format(minor / 100)}`;
+}

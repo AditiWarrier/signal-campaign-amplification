@@ -1,42 +1,35 @@
+import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Signal, SignalFonts, SignalType } from '@/constants/theme';
-import { monthlyWin, moreMonthlyWins } from '@/data/home-demo';
+
+const CHILDREN_IMAGE = require('../../../assets/images/home-children.jpg');
 
 export function MonthlyWins() {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <View style={s.section}>
-      <Text accessibilityRole="header" style={s.title}>Monthly Wins</Text>
-      <Text style={s.caption}>Small moments from campaigns this month.</Text>
+      <Text accessibilityRole="header" style={s.title}>Messages That Made It Out There: Our Monthly Wins!</Text>
+      <Text style={s.caption}>
+        Celebrating campaigns that reached their funding goals and took their messages further.
+      </Text>
 
-      <Image source={monthlyWin.image} style={s.image} contentFit="cover" accessibilityLabel="Neighbors looking at a newly painted community mural" />
-      <Text style={s.eyebrow}>{monthlyWin.month.toUpperCase()}</Text>
-      <Text style={s.storyTitle}>{monthlyWin.title}</Text>
-      <Text style={s.story}>{monthlyWin.summary}</Text>
-
-      {expanded && (
-        <View style={s.more}>
-          {moreMonthlyWins.map((win) => (
-            <View key={win.title} style={s.moreItem}>
-              <Text style={s.moreTitle}>{win.title}</Text>
-              <Text style={s.moreCopy}>{win.summary}</Text>
-            </View>
-          ))}
+      <View style={s.imageFrame}>
+        <Image
+          source={CHILDREN_IMAGE}
+          style={s.image}
+          contentFit="cover"
+          accessibilityLabel="A smiling group of children gathered together outdoors"
+        />
+        <View style={s.imageOverlay} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="link"
+            onPress={() => router.push('/wins')}
+            style={({ pressed }) => [s.button, pressed && s.pressed]}>
+            <Text style={s.buttonText}>Discover the Wins</Text>
+          </Pressable>
         </View>
-      )}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        onPress={() => setExpanded((value) => !value)}
-        hitSlop={8}
-        style={s.linkHit}>
-        <Text style={s.link}>{expanded ? 'Show less' : 'Explore This Month\u2019s Wins →'}</Text>
-      </Pressable>
+      </View>
     </View>
   );
 }
@@ -45,14 +38,10 @@ const s = StyleSheet.create({
   section: { paddingTop: 56 },
   title: { color: Signal.ink, fontFamily: SignalFonts.display, ...SignalType.sectionTitle },
   caption: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, ...SignalType.small, marginTop: 6, marginBottom: 18 },
-  image: { width: '100%', aspectRatio: 16 / 10, borderRadius: 4, backgroundColor: Signal.paperDeep },
-  eyebrow: { color: Signal.forest, fontFamily: SignalFonts.sans, ...SignalType.eyebrow, marginTop: 16 },
-  storyTitle: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 22, lineHeight: 28, marginTop: 6 },
-  story: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, ...SignalType.small, marginTop: 6 },
-  more: { marginTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Signal.hairline },
-  moreItem: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Signal.hairline },
-  moreTitle: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
-  moreCopy: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 20, marginTop: 3 },
-  linkHit: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', marginTop: 8 },
-  link: { color: Signal.lake, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
+  imageFrame: { width: '100%', aspectRatio: 16 / 10, borderRadius: 4, overflow: 'hidden', backgroundColor: Signal.paperDeep },
+  image: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
+  imageOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
+  button: { minHeight: 52, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 26, backgroundColor: '#2E5B3C' },
+  buttonText: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 16, fontWeight: '700' },
+  pressed: { opacity: 0.75 },
 });

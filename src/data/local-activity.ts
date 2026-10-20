@@ -1,6 +1,39 @@
 import { readCampaignDraft, readCampaignSubmission, readCampaignSubmissions, writeCampaignDraft } from '@/data/campaign-draft-storage';
-import { mergeAccountEvents as mergeEvents, recoverArchivedSubmissionEvents } from '@/data/local-activity-core';
+import { mergeAccountEvents as mergeEvents, recoverArchivedContributionEvents, recoverArchivedSubmissionEvents } from '@/data/local-activity-core';
 import { normalizeLocalCampaignDraft, type LocalCampaignDraft } from '@/types/local-campaign';
+
+// Lazy import to avoid circular dependency and test environment issues
+let catalogCampaignsCache: Record<string, string> | null = null;
+
+function getCatalogCampaigns(): Record<string, string> {
+  if (catalogCampaignsCache) return catalogCampaignsCache;
+  try {
+    const { discoveryCampaigns } = require('@/data/campaigns');
+    catalogCampaignsCache = Object.fromEntries(
+      discoveryCampaigns.map((campaign: { id: string; title: string }) => [campaign.id, campaign.title])
+    );
+  } catch {
+    // Fallback for test environment or if campaigns module is unavailable
+    catalogCampaignsCache = {
+      'pages-for-all-library': 'Every Child Deserves a Library',
+      'green-bengaluru-lakes': "Our Lakes Aren't Dumping Grounds",
+      'neighbourhood-arts-collective': 'Let Our Neighbourhood Tell Its Story',
+      'better-streets-collective': 'The Streets We Deserve',
+      'community-health-connect': 'Health Information Should Reach Everyone',
+      'community-science-watch': 'Community Science, Shared Discoveries',
+      'people-first-city-budget': 'A Clearer View of the City Budget',
+      'neighbourhood-makers-market': 'A Market for Neighbourhood Makers',
+      'neighbourhood-heat-safety': 'Cooler Routes Through Our Neighbourhood',
+      'stories-across-generations': 'Stories That Bring Generations Together',
+      'ananya-lake-shared-responsibility': 'Our Lakes, Our Shared Responsibility',
+      'rohan-safer-streets-everyone': 'Safer Streets Begin With Everyone',
+      'amara-clean-water-community': 'Clean Water, Stronger Communities',
+      'lucas-room-to-move': 'Room to Move: Streets for Everyone',
+      'yuki-art-in-every-neighbourhood': 'Art Belongs in Every Neighbourhood',
+    };
+  }
+  return catalogCampaignsCache;
+}
 
 export type LocalActivityEvent = {
   id: string;
@@ -14,6 +47,8 @@ export type LocalActivityEvent = {
 export { mergeEvents as mergeAccountEvents };
 
 const MAX_EVENTS = 100;
+
+export const CATALOG_CAMPAIGNS: Record<string, string> = getCatalogCampaigns();
 
 function storageKey(userId: string): string {
   return `${userId}.activity-events.v1`;
@@ -47,6 +82,23 @@ export async function readLocalActivityEvents(userId: string): Promise<LocalActi
     } catch {
       // Existing event records remain readable if legacy campaign storage is unavailable.
     }
+    try {
+      const contributionsByCampaign: { campaignId: string; campaignTitle?: string; records: unknown[] }[] = [];
+      for (const [campaignId, title] of Object.entries(CATALOG_CAMPAIGNS)) {
+        const raw = await readCampaignDraft(`device.demo-contributions.v2.${campaignId}`);
+        if (raw) {
+          try {
+            const records: unknown = JSON.parse(raw);
+            if (Array.isArray(records)) {
+              contributionsByCampaign.push({ campaignId, campaignTitle: title, records });
+            }
+          } catch { /* Ignore malformed raw records */ }
+        }
+      }
+      recovered = recoverArchivedContributionEvents(recovered, contributionsByCampaign, new Date().toISOString());
+    } catch {
+      // Existing event records remain readable if demo ledger is unavailable.
+    }
     if (recovered.length > current.length) {
       recovered = recovered.slice(0, MAX_EVENTS);
       try { await writeCampaignDraft(storageKey(ownerId), JSON.stringify(recovered)); } catch { /* Keep this view usable when backfill storage is unavailable. */ }
@@ -57,7 +109,11 @@ export async function readLocalActivityEvents(userId: string): Promise<LocalActi
   }
   const unique = new Map<string, LocalActivityEvent>();
   for (const event of allEvents) {
-    const key = event.eventType === 'campaign.submitted' ? `${event.eventType}:${event.campaignId}` : `${event.id}`;
+    const key = event.eventType === 'campaign.submitted'
+      ? `${event.eventType}:${event.campaignId}`
+      : event.eventType === 'contribution.simulated' && typeof event.metadata?.contributionId === 'string'
+        ? `${event.eventType}:${event.metadata.contributionId}`
+        : `${event.id}`;
     const existing = unique.get(key);
     if (!existing || event.metadata.recoveredFromAnonymousDevice !== true) unique.set(key, event);
   }
@@ -106,5 +162,46 @@ export async function recordLocalCampaignSubmission(userId: string, campaign: Lo
   };
   const next = [event, ...current].slice(0, MAX_EVENTS);
   await writeCampaignDraft(storageKey(userId), JSON.stringify(next));
+  notifyActivityChanged();
+}
+
+export async function recordLocalContribution(
+  userId: string,
+  contribution: {
+    id: string;
+    campaignId: string;
+    amountMinor: number;
+    currency?: string;
+    createdAt?: string;
+    idempotencyKey?: string;
+    displayFirstName?: string | null;
+    showFirstName?: boolean;
+  },
+  campaignTitle: string,
+): Promise<void> {
+  const ownerId = userId || 'device-draft';
+  const current = await readStoredEvents(ownerId);
+  const id = `local:contribution:${contribution.id}`;
+  if (current.some((item) => item.id === id || item.metadata?.contributionId === contribution.id)) {
+    notifyActivityChanged();
+    return;
+  }
+  const event: LocalActivityEvent = {
+    id,
+    eventType: 'contribution.simulated',
+    campaignId: contribution.campaignId,
+    campaignTitle,
+    createdAt: contribution.createdAt || new Date().toISOString(),
+    metadata: {
+      contributionId: contribution.id,
+      amountMinor: contribution.amountMinor,
+      currency: contribution.currency || 'USD',
+      displayFirstName: contribution.displayFirstName,
+      showFirstName: contribution.showFirstName,
+      idempotencyKey: contribution.idempotencyKey,
+    },
+  };
+  const next = [event, ...current].slice(0, MAX_EVENTS);
+  await writeCampaignDraft(storageKey(ownerId), JSON.stringify(next));
   notifyActivityChanged();
 }

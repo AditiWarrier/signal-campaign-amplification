@@ -22,6 +22,13 @@ function isDemoContribution(value: unknown, campaignId: string): value is LocalD
   return record.campaignId === campaignId
     && typeof record.id === 'string'
     && Number.isSafeInteger(record.amountMinor) && Number(record.amountMinor) > 0
+    && (record.campaignAmountMinor === undefined || (Number.isSafeInteger(record.campaignAmountMinor) && Number(record.campaignAmountMinor) > 0))
+    && (record.campaignCurrency === undefined || record.campaignCurrency === 'USD' || record.campaignCurrency === 'INR')
+    && (record.feeMinor === undefined || (Number.isSafeInteger(record.feeMinor) && Number(record.feeMinor) >= 0))
+    && (record.totalMinor === undefined || (Number.isSafeInteger(record.totalMinor) && Number(record.totalMinor) === Number(record.amountMinor) + Number(record.feeMinor ?? 0)))
+    && (record.displayFirstName === undefined || record.displayFirstName === null || (typeof record.displayFirstName === 'string' && record.displayFirstName.trim().length > 0 && record.displayFirstName.length <= 40))
+    && (record.showFirstName === undefined || typeof record.showFirstName === 'boolean')
+    && (!record.showFirstName || typeof record.displayFirstName === 'string')
     && record.currency === 'USD'
     && record.status === 'simulated'
     && typeof record.idempotencyKey === 'string'
@@ -63,19 +70,36 @@ export async function addDemoContribution(
   campaignId: string,
   amountMinor: number,
   idempotencyKey: string,
-  contributorName = 'Demo supporter',
+  options: {
+    campaignAmountMinor?: number;
+    campaignCurrency?: 'USD' | 'INR';
+    showFirstName?: boolean;
+    displayFirstName?: string;
+  } | string = {},
 ): Promise<LocalDemoContribution> {
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) throw new Error('Choose a valid contribution amount.');
   if (!contributorId.trim()) throw new Error('A demo supporter identity is required.');
   if (!idempotencyKey.trim()) throw new Error('A contribution confirmation key is required.');
 
   const storageKey = sharedStorageKey(campaignId);
+  const settings = typeof options === 'string' ? {} : options;
+  const displayFirstName = settings.showFirstName ? (settings.displayFirstName ?? '').trim().split(/\s+/)[0].slice(0, 40) : '';
+  if (settings.showFirstName && !displayFirstName) throw new Error('Enter a first name or turn off the optional name display preference.');
+  if (settings.campaignAmountMinor !== undefined && (!Number.isSafeInteger(settings.campaignAmountMinor) || settings.campaignAmountMinor <= 0)) {
+    throw new Error('The campaign-currency contribution amount is invalid.');
+  }
   const previous = writeQueues.get(storageKey) ?? Promise.resolve();
   let result: LocalDemoContribution | null = null;
   const task = previous.catch(() => undefined).then(async () => {
     const records = await readDemoContributions(contributorId, campaignId);
     const existing = records.find((item) => item.idempotencyKey === idempotencyKey);
-    if (existing) { result = existing; return; }
+    if (existing) {
+      if (existing.amountMinor !== amountMinor || (existing.displayFirstName ?? null) !== (displayFirstName || null)) {
+        throw new Error('This demo transaction reference was already used for a different contribution.');
+      }
+      result = existing;
+      return;
+    }
     if (records.length >= MAX_RECORDS_PER_CAMPAIGN) throw new Error('This demo ledger has reached its local limit.');
 
     const contribution: LocalDemoContribution = {
@@ -83,9 +107,14 @@ export async function addDemoContribution(
       campaignId,
       amountMinor,
       currency: 'USD',
+      campaignAmountMinor: settings.campaignAmountMinor,
+      campaignCurrency: settings.campaignCurrency ?? (settings.campaignAmountMinor === undefined ? undefined : 'INR'),
+      feeMinor: 0,
+      totalMinor: amountMinor,
+      showFirstName: Boolean(settings.showFirstName),
+      displayFirstName: displayFirstName || null,
       status: 'simulated',
       contributorId,
-      contributorName: contributorName.trim().slice(0, 80) || 'Demo supporter',
       idempotencyKey,
       createdAt: new Date().toISOString(),
     };

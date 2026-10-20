@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createServer } = require('node:http');
-const { createApp, validateCampaignInput } = require('../app');
+const { createApp, validateCampaignInput, validateDemoContribution } = require('../app');
 const { createSupabaseAuth, createAuthMiddleware } = require('../auth');
 const { JsonStore, MemoryStore } = require('../store');
 
@@ -21,6 +21,20 @@ const completeDraft = {
   locations: ['Canada'], minimumAge: '18', maximumAge: '', interests: 'Community', channels: ['instagram'], durationDays: '14',
   instagramBudget: '20', facebookBudget: '', fundingGoal: '100', policyAccepted: true,
 };
+
+test('demo contribution validation enforces campaign, USD amount limits, and explicit first-name preference', () => {
+  assert.deepEqual(validateDemoContribution({ campaignId: 'campaign-1', amountMinor: 500, currency: 'USD', idempotencyKey: 'demo-key-0001' }), {
+    campaignId: 'campaign-1', amountMinor: 500, currency: 'USD', idempotencyKey: 'demo-key-0001', firstName: null,
+  });
+  assert.equal(validateDemoContribution({ campaignId: 'campaign-1', amountMinor: 500, currency: 'USD', idempotencyKey: 'demo-key-0002', showFirstName: true, firstName: 'Asha Nair' }).firstName, 'Asha');
+  for (const body of [
+    { campaignId: '', amountMinor: 500, currency: 'USD', idempotencyKey: 'demo-key-0003' },
+    { campaignId: 'campaign-1', amountMinor: 99, currency: 'USD', idempotencyKey: 'demo-key-0004' },
+    { campaignId: 'campaign-1', amountMinor: 100001, currency: 'USD', idempotencyKey: 'demo-key-0005' },
+    { campaignId: 'campaign-1', amountMinor: 500, currency: 'INR', idempotencyKey: 'demo-key-0006' },
+    { campaignId: 'campaign-1', amountMinor: 500, currency: 'USD', idempotencyKey: 'demo-key-0007', showFirstName: true, firstName: '' },
+  ]) assert.throws(() => validateDemoContribution(body), /./);
+});
 
 test('Supabase access-token verification uses the Auth user GET endpoint', async () => {
   let captured;
@@ -315,13 +329,22 @@ test('submission, reviewer permissions, simulated contribution, activity and rep
   assert.equal((await request(`/api/reviews/${id}/status`, { token: 'reviewer_token', method: 'POST', body: { status: 'approved', feedback: 'Approved for the fictional demo.' } })).data.campaign.status, 'approved');
   const selfContribution = await request('/api/demo/contributions', { token: 'creator_token', method: 'POST', body: { campaignId: id, amountMinor: 500, currency: 'USD', idempotencyKey: 'self-contribution-1' } });
   assert.equal(selfContribution.status, 403);
-  const body = { campaignId: id, amountMinor: 1000, currency: 'USD', idempotencyKey: 'supporter-payment-1' };
+  const body = { campaignId: id, amountMinor: 1000, currency: 'USD', idempotencyKey: 'supporter-payment-1', showFirstName: true, firstName: 'Mira Patel' };
   const contribution = await request('/api/demo/contributions', { token: 'supporter_token', method: 'POST', body });
   assert.equal(contribution.status, 201);
   assert.equal(contribution.data.simulated, true);
   assert.equal(contribution.data.actualPaymentProcessed, false);
+  assert.equal(contribution.data.contribution.displayFirstName, 'Mira');
+  assert.equal(contribution.data.contribution.feeMinor, 0);
+  assert.equal(contribution.data.contribution.totalMinor, 1000);
   const duplicate = await request('/api/demo/contributions', { token: 'supporter_token', method: 'POST', body });
   assert.equal(duplicate.data.contribution.id, contribution.data.contribution.id);
+  const conflictingDuplicate = await request('/api/demo/contributions', { token: 'supporter_token', method: 'POST', body: { ...body, firstName: 'A different name' } });
+  assert.equal(conflictingDuplicate.status, 409);
+  const missingCampaign = await request('/api/demo/contributions', { token: 'supporter_token', method: 'POST', body: { ...body, campaignId: '' } });
+  assert.equal(missingCampaign.status, 400);
+  const invalidFirstName = await request('/api/demo/contributions', { token: 'supporter_token', method: 'POST', body: { ...body, idempotencyKey: 'invalid-first-name-1', firstName: ' ' } });
+  assert.equal(invalidFirstName.status, 400);
   const totals = await request(`/api/campaigns/${id}/contributions`, { token: 'creator_token' });
   assert.equal(totals.data.fundingGoalMinor, 10000);
   assert.equal(totals.data.simulatedRaisedMinor, 1000);

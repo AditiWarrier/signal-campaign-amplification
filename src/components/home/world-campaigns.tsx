@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Signal, SignalFonts, SignalType } from '@/constants/theme';
 import { parseUsdMinor } from '@/data/funding';
+import { formatEstimatedReachAtGoal } from '@/data/campaigns';
 import type { HomeCampaign } from '@/data/home-demo';
 
 const CARD_GAP = 14;
@@ -19,8 +20,8 @@ type Props = {
   gutter: number;
 };
 
-function formatUsd(value: number) {
-  return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+function formatInr(value: number) {
+  return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 function CampaignCard({ campaign, width, demoRaisedMinor, signedIn }: { campaign: HomeCampaign; width: number; demoRaisedMinor: number; signedIn: boolean }) {
@@ -28,6 +29,7 @@ function CampaignCard({ campaign, width, demoRaisedMinor, signedIn }: { campaign
   const goalMinor = parseUsdMinor(campaign.goal);
   const progress = goalMinor > 0 ? Math.min(raisedMinor / goalMinor, 1) : 0;
   const percent = Math.round(progress * 100);
+  const estimatedReach = formatEstimatedReachAtGoal(campaign);
 
   return (
     <View style={[s.card, { width }]}>
@@ -39,39 +41,41 @@ function CampaignCard({ campaign, width, demoRaisedMinor, signedIn }: { campaign
       />
       <View style={s.body}>
         <Text style={s.category}>{campaign.category.toUpperCase()}</Text>
-        <Text style={s.title} numberOfLines={2}>{campaign.title}</Text>
-        <Text style={s.creator} numberOfLines={1}>By {campaign.creator}</Text>
-        <Text style={s.summary} numberOfLines={3}>{campaign.summary}</Text>
+        <View style={s.campaignCopy}>
+          <Text style={s.title}>{campaign.title}</Text>
+          <Text style={s.creator}>By {campaign.creator}</Text>
+        </View>
+        <Text style={s.summary}>{campaign.description}</Text>
 
-        <View style={s.moneyRow}>
-          <Text style={s.money}>{formatUsd(raisedMinor / 100)}</Text>
-          <Text style={s.goal}>raised of {formatUsd(campaign.goal)}</Text>
-        </View>
-        <View
-          accessibilityRole="progressbar"
-          accessibilityLabel={`${percent}% of demo funding goal`}
-          accessibilityValue={{ min: 0, max: 100, now: percent }}
-          style={s.track}>
-          <View style={[s.fill, { width: `${progress * 100}%` }]} />
-        </View>
-        <View style={s.metaRow}>
-          <Text style={s.meta}>{percent}% funded</Text>
-          <Text style={s.meta}>
-            Est. reach <Text style={s.metaStrong}>~{campaign.reach.toLocaleString('en-US')}</Text>
-          </Text>
-        </View>
+        <View style={s.fundingArea}>
+          <View style={s.moneyRow}>
+            <Text style={s.money}>{formatInr(raisedMinor / 100)}</Text>
+            <Text style={s.goal}>raised of {formatInr(campaign.goal)}</Text>
+          </View>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel={`${percent}% of demo funding goal`}
+            accessibilityValue={{ min: 0, max: 100, now: percent }}
+            style={s.track}>
+            <View style={[s.fill, { width: `${progress * 100}%` }]} />
+          </View>
+          <View style={s.metaRow}>
+            <Text style={s.meta}>{percent}% funded</Text>
+            <Text style={s.meta}>
+              Est. reach <Text style={s.metaStrong}>{estimatedReach === null ? 'unavailable' : `~${estimatedReach}`}</Text>
+            </Text>
+          </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Back This Campaign: ${campaign.title}. Demo only, no payment is taken.`}
-          accessibilityHint={signedIn ? undefined : 'Sign in to back this campaign'}
-          style={({ pressed }) => [s.button, pressed && s.pressed]}
-          onPress={() => (signedIn
-            ? router.push({ pathname: '/campaign/[id]', params: { id: campaign.id } } as never)
-            : router.push('/login'))}>
-          <Text style={s.buttonText}>Back This Campaign</Text>
-          <Text style={s.buttonText}>{'→'}</Text>
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Back This Campaign: ${campaign.title}. Demo only, no payment is taken.`}
+            accessibilityHint={signedIn ? 'Read the campaign details before choosing to contribute' : 'Open the campaign details, then sign in if you choose to contribute'}
+            style={({ pressed }) => [s.button, pressed && s.pressed]}
+            onPress={() => router.push({ pathname: '/campaign/[id]', params: { id: campaign.id } } as never)}>
+            <Text style={s.buttonText}>Back This Campaign</Text>
+            <Text style={s.buttonText}>{'→'}</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -85,7 +89,6 @@ export function WorldCampaigns({ campaigns, demoTotals, signedIn, windowWidth, c
     <View style={s.section}>
       <View style={[s.head, { paddingHorizontal: inset }]}>
         <Text accessibilityRole="header" style={s.heading}>Campaigns Around the World</Text>
-        <Text style={s.lede}>Local causes looking for a wider audience. Figures shown are demo values.</Text>
       </View>
       <ScrollView
         horizontal
@@ -114,34 +117,35 @@ export function WorldCampaigns({ campaigns, demoTotals, signedIn, windowWidth, c
 }
 
 const s = StyleSheet.create({
-  section: { backgroundColor: Signal.charcoal, paddingTop: 52, paddingBottom: 36, marginTop: 56, width: '100%' },
-  head: { marginBottom: 22, gap: 8 },
+  section: { backgroundColor: Signal.charcoal, paddingTop: 48, paddingBottom: 36, marginTop: 56, width: '100%' },
+  head: { marginBottom: 32 },
   heading: { color: Signal.onDark, fontFamily: SignalFonts.display, ...SignalType.sectionTitle },
-  lede: { color: Signal.onDarkSoft, fontFamily: SignalFonts.sans, ...SignalType.small },
-  row: { gap: CARD_GAP },
+  row: { gap: CARD_GAP, alignItems: 'stretch' },
   pressed: { opacity: 0.7 },
 
-  card: { borderRadius: 4, overflow: 'hidden', backgroundColor: '#1E221F', borderWidth: StyleSheet.hairlineWidth, borderColor: Signal.charcoalLine },
+  card: { borderRadius: 4, overflow: 'hidden', backgroundColor: '#1E221F', borderWidth: StyleSheet.hairlineWidth, borderColor: Signal.charcoalLine, alignSelf: 'stretch' },
   cover: { backgroundColor: Signal.charcoalLine },
-  body: { padding: 16 },
-  category: { color: '#8FC2A0', fontFamily: SignalFonts.sans, fontSize: 11, lineHeight: 14, letterSpacing: 1.4, fontWeight: '700' },
-  title: { color: Signal.onDark, fontFamily: SignalFonts.display, fontSize: 21, lineHeight: 26, marginTop: 6 },
-  creator: { color: Signal.onDarkSoft, fontFamily: SignalFonts.sans, fontSize: 13, lineHeight: 18, marginTop: 4 },
-  summary: { color: '#D6D9D1', fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 20, marginTop: 10 },
+  body: { padding: 16, flex: 1 },
+  category: { color: '#AEBB99', fontFamily: SignalFonts.sans, fontSize: 11, lineHeight: 14, letterSpacing: 1.4, fontWeight: '700' },
+  campaignCopy: { marginTop: 6, gap: 4 },
+  title: { color: Signal.onDark, fontFamily: SignalFonts.display, fontSize: 21, lineHeight: 26 },
+  creator: { color: Signal.onDarkSoft, fontFamily: SignalFonts.sans, fontSize: 13, lineHeight: 18 },
+  summary: { color: '#C7C9C0', fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 20, marginTop: 10 },
+  fundingArea: { marginTop: 'auto', paddingTop: 14, gap: 12 },
 
-  moneyRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 16, marginBottom: 8 },
+  moneyRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   money: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 17, fontWeight: '700' },
   goal: { color: Signal.onDarkSoft, fontFamily: SignalFonts.sans, fontSize: 13 },
   track: { height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: Signal.charcoalLine },
-  fill: { height: 4, borderRadius: 2, backgroundColor: '#6FAF85' },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  fill: { height: 4, borderRadius: 2, backgroundColor: '#84916E' },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between' },
   meta: { color: Signal.onDarkSoft, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 17 },
   metaStrong: { color: Signal.onDark, fontWeight: '700' },
 
-  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 46, borderRadius: 23, marginTop: 16, backgroundColor: Signal.onDark },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 46, borderRadius: 23, backgroundColor: Signal.onDark },
   buttonText: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
 
-  footRow: { marginTop: 14, alignItems: 'flex-start' },
+  footRow: { marginTop: 20, alignItems: 'flex-start' },
   linkHit: { minHeight: 44, justifyContent: 'center' },
   link: { color: '#9CC4DF', fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
 });

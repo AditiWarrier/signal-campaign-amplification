@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Palette as C } from '@/constants/theme';
-import { calculateFundingProgress, formatUsdMinor } from '@/data/funding';
+import { calculateFundingProgress, formatInrMinor, formatUsdMinor } from '@/data/funding';
 
 type Props = {
   goalMinor: number;
@@ -10,13 +10,15 @@ type Props = {
   contributionCount?: number;
   verifiedRaisedMinor?: number;
   note: string;
+  currency?: 'USD' | 'INR';
 };
 
 function safeCount(value: number | undefined): number | undefined {
   return value !== undefined && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
-export function FundingSummary({ goalMinor, progressMinor, progressLabel, contributionCount, verifiedRaisedMinor, note }: Props) {
+export function FundingSummary({ goalMinor, progressMinor, progressLabel, contributionCount, verifiedRaisedMinor, note, currency = 'USD' }: Props) {
+  const formatAmount = currency === 'INR' ? formatInrMinor : formatUsdMinor;
   const progress = calculateFundingProgress(goalMinor, progressMinor);
   const count = safeCount(contributionCount);
   const verified = verifiedRaisedMinor === undefined ? undefined : verifiedRaisedMinor;
@@ -28,19 +30,19 @@ export function FundingSummary({ goalMinor, progressMinor, progressLabel, contri
     </View>
     <View style={styles.valueRow}>
       <Text style={styles.label}>Funding goal</Text>
-      <Text style={styles.value}>{progress.goalMinor > 0 ? formatUsdMinor(progress.goalMinor) : 'Not set'}</Text>
+      <Text style={styles.value}>{progress.goalMinor > 0 ? formatAmount(progress.goalMinor) : 'Not set'}</Text>
     </View>
     {verified !== undefined ? <View style={styles.valueRow}>
       <Text style={styles.label}>Verified funds received</Text>
-      <Text style={styles.value}>{formatUsdMinor(verified)}</Text>
+      <Text style={styles.value}>{formatAmount(verified)}</Text>
     </View> : null}
     <View style={styles.valueRow}>
       <Text style={styles.label}>{progressLabel}</Text>
-      <Text style={styles.value}>{formatUsdMinor(progress.raisedMinor)}</Text>
+      <Text style={styles.value}>{formatAmount(progress.raisedMinor)}</Text>
     </View>
     <View style={styles.progressHeading}>
       <Text style={styles.label}>{progress.percentage === null ? 'Progress unavailable' : `Progress ${progress.percentage.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`}</Text>
-      <Text style={styles.label}>{progress.remainingMinor === null ? 'Remaining —' : `${formatUsdMinor(progress.remainingMinor)} remaining`}</Text>
+      <Text style={styles.label}>{progress.remainingMinor === null ? 'Remaining —' : `${formatAmount(progress.remainingMinor)} remaining`}</Text>
     </View>
     <View accessibilityRole="progressbar" accessibilityLabel="Funding progress" accessibilityValue={progress.percentage === null ? undefined : { min: 0, max: 100, now: Math.round(progress.barPercentage) }} style={styles.track}>
       <View style={[styles.fill, { width: `${progress.barPercentage}%` }]} />

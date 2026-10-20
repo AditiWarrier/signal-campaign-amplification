@@ -11,6 +11,10 @@ export type LocalCampaignDraft = {
   localStatus: 'draft' | 'submitted_locally';
   /** Backend state for truthful local-vs-API confirmation copy; absent on legacy saves. */
   apiSubmissionStatus?: 'local_only' | 'submitted' | 'sync_failed';
+  /** Backend lifecycle state for API campaigns; absent on local-only drafts. */
+  backendStatus?: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'completed' | 'cancelled';
+  /** Authenticated owner ID returned by the campaign API, when available. */
+  ownerId?: string;
   title: string;
   category: CampaignCategory | '';
   creatorName: string;
@@ -80,6 +84,15 @@ export type LocalDemoContribution = {
   campaignId: string;
   amountMinor: number;
   currency: 'USD';
+  /** Funding amount expressed in the campaign's currency (INR for catalogue campaigns). */
+  campaignAmountMinor?: number;
+  campaignCurrency?: 'USD' | 'INR';
+  /** No fee schedule is configured; retained explicitly for review and receipt consistency. */
+  feeMinor?: number;
+  totalMinor?: number;
+  /** First name is retained only after an explicit display opt-in. */
+  displayFirstName?: string | null;
+  showFirstName?: boolean;
   status: 'simulated';
   /** Optional for backward compatibility with older device-scoped demo records. */
   contributorId?: string;
