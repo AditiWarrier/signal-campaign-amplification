@@ -176,13 +176,14 @@ function visibleTo(user, campaign) {
   return campaign.ownerId === user.id || campaign.status === 'approved';
 }
 
-function createApp({ store, campaigns, auth, authMiddleware, authService } = {}) {
+function createApp({ store, campaigns, auth, authMiddleware, authService, aiSuggestions } = {}) {
   if (!store && !campaigns) throw new Error('A campaign persistence adapter is required.');
   const app = express();
   const authenticate = authMiddleware || createAuthMiddleware(auth || {
     verifyAccessToken: async () => { throw new Error('Auth unavailable'); },
   });
   const authApi = authService || auth;
+  const aiSuggestionRequests = new Map();
 
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -242,6 +243,19 @@ function createApp({ store, campaigns, auth, authMiddleware, authService } = {})
       return created;
     });
     return res.status(201).json({ campaign });
+  });
+  app.post('/api/campaigns/ai-suggestions', authenticate, async (req, res) => {
+    if (typeof aiSuggestions !== 'function') {
+      return res.status(503).json({ error: { code: 'AI_NOT_CONFIGURED', message: 'AI suggestions are unavailable because the SIGNAL backend AI service is not configured.' } });
+    }
+    const idea = str(req.body?.idea, 2000, 'Campaign idea', true).trim();
+    if (idea.length < 10) throw apiError(400, 'VALIDATION_ERROR', 'Describe your campaign idea in at least 10 characters.');
+    const now = Date.now();
+    const recent = (aiSuggestionRequests.get(req.auth.id) || []).filter((timestamp) => now - timestamp < 15 * 60_000);
+    if (recent.length >= 6) throw apiError(429, 'AI_RATE_LIMITED', 'You have reached the campaign suggestion limit. Try again later.');
+    recent.push(now);
+    aiSuggestionRequests.set(req.auth.id, recent);
+    return res.json({ suggestions: await aiSuggestions(idea) });
   });
   app.get('/api/campaigns/:id/contributions', authenticate, async (req, res) => {
     const state = await store.read();

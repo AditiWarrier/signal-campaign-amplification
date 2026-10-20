@@ -4,6 +4,7 @@ const { createSupabaseAuth } = require('./auth');
 const { createApp, AUTH_DIAGNOSTIC_CONTRACT } = require('./app');
 const { JsonStore } = require('./store');
 const { createSupabaseCampaigns } = require('./supabase-campaigns');
+const { createOpenAiCampaignSuggestions } = require('./ai-campaign-suggestions');
 
 loadProjectEnv();
 
@@ -35,7 +36,8 @@ const campaigns = createSupabaseCampaigns({
 // This file store remains for simulated contribution fixtures only. Campaigns
 // and authenticated account Activity are served from Supabase.
 const store = new JsonStore(process.env.SIGNAL_DATA_FILE || path.resolve(projectRoot, '.data', 'signal-api.json'));
-const app = createApp({ store, campaigns, auth });
+const aiSuggestions = createOpenAiCampaignSuggestions();
+const app = createApp({ store, campaigns, auth, aiSuggestions });
 
 app.listen(port, '0.0.0.0', () => {
   process.stdout.write(`SIGNAL API listening on port ${port}; pid: ${process.pid}; campaign storage driver: ${campaigns.configured ? 'supabase' : 'unconfigured'}; auth contract: ${AUTH_DIAGNOSTIC_CONTRACT}; entrypoint: ${__filename}; app module: ${require.resolve('./app')}; cwd: ${process.cwd()}\n`);

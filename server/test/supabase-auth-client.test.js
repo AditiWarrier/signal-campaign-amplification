@@ -133,13 +133,76 @@ test('sign-in persists the issued session and sign-out clears it even when logou
   let persisted;
   const storage = { async read() { return persisted ?? null; }, async write(value) { persisted = value; }, async clear() { persisted = undefined; } };
   global.fetch = async (url) => url.endsWith('/token?grant_type=password')
-    ? { ok: true, json: async () => ({ access_token: 'signed-in-access', refresh_token: 'signed-in-refresh', expires_in: 3600, user: { id: 'user-1', email: 'u@example.test' } }) }
+    ? { ok: true, json: async () => ({ access_token: 'signed-in-access', refresh_token: 'signed-in-refresh', expires_in: 3600, user: { id: 'user-1', email: 'u@example.test', user_metadata: { full_name: 'Jane Doe', location: 'Bengaluru', interests: ['Education'], about_me: 'I care about learning.', age: 34, gender: 'Female', occupation: 'Employed' } } }) }
     : { ok: false, status: 401, headers: { get: () => null }, json: async () => ({ msg: 'Session already ended.' }) };
   const { signInWithPassword, signOutSession } = loadSupabaseAuth(storage);
   const session = await signInWithPassword('u@example.test', 'a-password');
   assert.equal(JSON.parse(persisted).access_token, 'signed-in-access');
+  assert.deepEqual(JSON.parse(persisted).user.user_metadata, { full_name: 'Jane Doe', location: 'Bengaluru', interests: ['Education'], about_me: 'I care about learning.', age: 34, gender: 'Female', occupation: 'Employed' });
+  assert.equal(session.user.user_metadata.about_me, 'I care about learning.');
   await assert.rejects(signOutSession(session));
   assert.equal(persisted, undefined);
+});
+
+test('registration sends optional profile fields with the account creation request', async (t) => {
+  const oldUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const oldKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const oldFetch = global.fetch;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.EXPO_PUBLIC_SUPABASE_URL; else process.env.EXPO_PUBLIC_SUPABASE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY; else process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = oldKey;
+    global.fetch = oldFetch;
+  });
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://signal-test.supabase.co';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'test-key';
+  const storage = { async read() { return null; }, async write() {}, async clear() {} };
+  let request;
+  global.fetch = async (_url, options) => {
+    request = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ user: { id: 'user-1', email: request.email, user_metadata: request.data }, session: null }) };
+  };
+  const { registerWithPassword } = loadSupabaseAuth(storage);
+  const result = await registerWithPassword('Jane Doe', 'jane@example.test', 'a-password', {
+    location: 'Bengaluru', interests: ['Education', 'Environment'], about_me: 'I care about local communities.', age: 29, gender: 'Trans', occupation: 'Community organiser',
+  });
+  assert.equal(result.confirmationRequired, true);
+  assert.equal(request.data.full_name, 'Jane Doe');
+  assert.equal(request.data.location, 'Bengaluru');
+  assert.deepEqual(request.data.interests, ['Education', 'Environment']);
+  assert.equal(request.data.about_me, 'I care about local communities.');
+  assert.equal(request.data.age, 29);
+  assert.equal(request.data.gender, 'Trans');
+  assert.equal(request.data.occupation, 'Community organiser');
+});
+
+test('profile edits use the current user token and persist returned metadata in that session', async (t) => {
+  const oldUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const oldKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const oldFetch = global.fetch;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.EXPO_PUBLIC_SUPABASE_URL; else process.env.EXPO_PUBLIC_SUPABASE_URL = oldUrl;
+    if (oldKey === undefined) delete process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY; else process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = oldKey;
+    global.fetch = oldFetch;
+  });
+  process.env.EXPO_PUBLIC_SUPABASE_URL = 'https://signal-test.supabase.co';
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'test-key';
+  let persisted;
+  const storage = { async read() { return persisted ?? null; }, async write(value) { persisted = value; }, async clear() { persisted = undefined; } };
+  const profile = { full_name: 'Jane Rivers', location: 'Pune', interests: ['Health'], about_me: 'I care about public health.', age: 42, gender: 'Other', occupation: 'Researcher' };
+  let request;
+  global.fetch = async (url, options) => {
+    request = { url, options };
+    return { ok: true, json: async () => ({ id: 'user-1', email: 'jane@example.test', user_metadata: JSON.parse(options.body).data }) };
+  };
+  const { updateUserProfile, saveSession } = loadSupabaseAuth(storage);
+  const session = { access_token: 'user-access-token', refresh_token: 'user-refresh-token', expires_at: 9000000000, user: { id: 'user-1', email: 'jane@example.test', user_metadata: { full_name: 'Jane Doe', custom_value: 'keep-me' } } };
+  const updated = await updateUserProfile(session, profile);
+  await saveSession(updated);
+
+  assert.equal(request.url, 'https://signal-test.supabase.co/auth/v1/user');
+  assert.equal(request.options.headers.Authorization, 'Bearer user-access-token');
+  assert.equal(JSON.parse(request.options.body).data.custom_value, 'keep-me');
+  assert.deepEqual(JSON.parse(persisted).user.user_metadata, { ...profile, custom_value: 'keep-me' });
 });
 
 test('simultaneous refresh requests for one rotating refresh token share a single request', async (t) => {

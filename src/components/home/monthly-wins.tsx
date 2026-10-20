@@ -41,7 +41,7 @@ const s = StyleSheet.create({
   imageFrame: { width: '100%', aspectRatio: 16 / 10, borderRadius: 4, overflow: 'hidden', backgroundColor: Signal.paperDeep },
   image: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   imageOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
-  button: { minHeight: 52, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 26, backgroundColor: '#2E5B3C' },
+  button: { minHeight: 52, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 26, backgroundColor: Signal.forest },
   buttonText: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 16, fontWeight: '700' },
   pressed: { opacity: 0.75 },
 });

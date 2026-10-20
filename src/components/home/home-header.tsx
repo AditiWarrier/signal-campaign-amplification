@@ -40,22 +40,22 @@ export function HomeHeader({ menuOnly = false }: { menuOnly?: boolean }) {
     <View style={styles.header}>
       {menuOnly ? <View style={styles.headerSpacer} /> : <Text style={styles.wordmark} accessibilityRole="header">SIGNAL</Text>}
       <View style={styles.actions}>
-        {!menuOnly && <Pressable
+        {!menuOnly && !signedIn ? <Pressable
           accessibilityRole="button"
-          accessibilityLabel={signedIn ? 'Open your profile' : 'Sign in or log in'}
-          onPress={() => router.push(signedIn ? '/profile' : '/login')}
+          accessibilityLabel="Sign In"
+          onPress={() => router.push('/login')}
           hitSlop={6}
           style={({ pressed }) => [styles.signIn, pressed && styles.pressed]}>
-          <Text style={styles.signInText}>{signedIn ? 'Account' : 'Sign in'}</Text>
-        </Pressable>}
-        <Pressable
+          <Text style={styles.signInText}>Sign In</Text>
+        </Pressable> : null}
+        {menuOnly ? <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open navigation menu"
           accessibilityState={{ expanded: menuOpen }}
           onPress={() => setMenuOpen(true)}
           style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}>
           <HamburgerIcon open={false} />
-        </Pressable>
+        </Pressable> : null}
       </View>
 
       <Modal visible={menuOpen} animationType="fade" transparent onRequestClose={() => setMenuOpen(false)}>
@@ -114,8 +114,8 @@ const styles = StyleSheet.create({
   headerSpacer: { flex: 1 },
   wordmark: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: 5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  signIn: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' },
-  signInText: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
+  signIn: { minHeight: 44, minWidth: 56, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' },
+  signInText: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 14, fontWeight: '700' },
   menuButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   burger: { width: 22, height: 16, justifyContent: 'space-between' },
   burgerLine: { height: 2, borderRadius: 1, backgroundColor: Signal.ink },

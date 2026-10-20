@@ -37,9 +37,9 @@ const styles = StyleSheet.create({
   lead: { color: Signal.ink, fontFamily: SignalFonts.display, ...SignalType.lead },
   body: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, ...SignalType.body, marginTop: 14 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 24 },
-  primary: { flexGrow: 1, flexBasis: 150, minHeight: 50, paddingHorizontal: 18, borderRadius: 25, backgroundColor: '#2E5B3C', alignItems: 'center', justifyContent: 'center' },
+  primary: { flexGrow: 1, flexBasis: 150, minHeight: 50, paddingHorizontal: 18, borderRadius: 25, backgroundColor: Signal.forest, alignItems: 'center', justifyContent: 'center' },
   primaryText: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
-  secondary: { flexGrow: 1, flexBasis: 150, minHeight: 50, paddingHorizontal: 18, borderRadius: 25, borderWidth: 1, borderColor: '#2E5B3C', backgroundColor: '#2E5B3C', alignItems: 'center', justifyContent: 'center' },
+  secondary: { flexGrow: 1, flexBasis: 150, minHeight: 50, paddingHorizontal: 18, borderRadius: 25, borderWidth: 1, borderColor: Signal.forest, backgroundColor: Signal.forest, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { color: Signal.onDark, fontFamily: SignalFonts.sans, fontSize: 15, fontWeight: '700' },
   pressed: { opacity: 0.7 },
 });

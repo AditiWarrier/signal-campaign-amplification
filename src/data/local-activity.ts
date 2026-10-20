@@ -120,6 +120,12 @@ export async function readLocalActivityEvents(userId: string): Promise<LocalActi
   return [...unique.values()].slice(0, MAX_EVENTS);
 }
 
+/** Read only events stored in this account's namespace, without device-wide recovery. */
+export async function readOwnedLocalActivityEvents(userId: string): Promise<LocalActivityEvent[]> {
+  if (!userId || userId === 'device-draft') return [];
+  return readStoredEvents(userId);
+}
+
 function parseSubmittedCampaign(value: string | null): LocalCampaignDraft | null {
   if (!value) return null;
   try {

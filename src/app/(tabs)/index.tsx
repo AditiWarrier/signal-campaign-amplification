@@ -25,6 +25,7 @@ export default function HomeScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const { session } = useAuth();
   const [demoTotals, setDemoTotals] = useState<Record<string, { amountMinor: number; count: number }>>({});
+  const [focusedFooterLink, setFocusedFooterLink] = useState<string | null>(null);
   const { width: windowWidth } = useWindowDimensions();
   useWebScrollDiagnostics(scrollRef, 'home');
   useFocusEffect(useCallback(() => {
@@ -74,15 +75,17 @@ export default function HomeScreen() {
         <View style={s.formalFooter}>
           <View style={s.formalFooterContent}>
             <Text style={s.formalFooterWordmark}>SIGNAL</Text>
-            <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: '/information', params: { section: 'about' } } as never)} hitSlop={5} style={s.formalFooterAboutHit}>
-              <Text style={s.formalFooterAbout}>About</Text>
+            <Pressable accessibilityRole="link" onPress={() => router.push({ pathname: '/information', params: { section: 'about' } } as never)} onFocus={() => setFocusedFooterLink('About')} onBlur={() => setFocusedFooterLink((current) => current === 'About' ? null : current)} hitSlop={5} style={[s.formalFooterAboutHit, focusedFooterLink === 'About' && s.formalFooterLinkFocus]}>
+              <Text style={[s.formalFooterAbout, s.formalFooterAboutLink, focusedFooterLink === 'About' && s.formalFooterLinkFocused]}>About</Text>
             </Pressable>
             <Text style={s.formalFooterDescription}>A little about SIGNAL and the work we do.</Text>
             <View style={s.formalFooterGroups}>
               {footerGroups.map((group) => <View key={group.title} style={[s.formalFooterGroup, wideFooter ? s.formalFooterGroupWide : s.formalFooterGroupMobile]}>
                 <Text style={s.formalFooterGroupTitle}>{group.title}</Text>
                 {group.links.map((item) => {
-                  const label = <Text style={s.formalFooterLink}>{item.label}</Text>;
+                  const isPlaceholder = !item.section && !item.route;
+                  const focused = focusedFooterLink === item.label;
+                  const label = <Text style={[s.formalFooterLink, isPlaceholder && s.formalFooterPlaceholder, focused && s.formalFooterLinkFocused]}>{item.label}</Text>;
                   if (!item.section && !item.route) {
                     return <View key={item.label} style={s.formalFooterLinkCell}>{label}</View>;
                   }
@@ -94,14 +97,9 @@ export default function HomeScreen() {
                     } else if (item.route) {
                       router.push(item.route);
                     }
-                  }} hitSlop={5} style={s.formalFooterLinkCell}>{label}</Pressable>;
+                  }} onFocus={() => setFocusedFooterLink(item.label)} onBlur={() => setFocusedFooterLink((current) => current === item.label ? null : current)} hitSlop={5} style={[s.formalFooterLinkCell, focused && s.formalFooterLinkFocus]}>{label}</Pressable>;
                 })}
               </View>)}
-            </View>
-            <View style={s.formalFooterBottomLinks}>
-              {footerBottomLinks.map((item) => <Pressable key={item.label} accessibilityRole="link" onPress={() => router.push({ pathname: '/information', params: { section: item.section } } as never)} hitSlop={5} style={s.formalFooterBottomLinkCell}>
-                <Text style={s.formalFooterLink}>{item.label}</Text>
-              </Pressable>)}
             </View>
           </View>
         </View>
@@ -122,14 +120,9 @@ type FooterGroupLink = {
 const footerGroups: { title: string; links: FooterGroupLink[] }[] = [
   { title: 'PLATFORM', links: [{ label: 'Explore Campaigns', route: '/explore' }, { label: 'Start a Campaign', route: '/create' }] },
   { title: 'HOW IT WORKS', links: [{ label: 'Review Process' }, { label: 'Evaluation' }, { label: 'FAQ' }] },
-  { title: 'LEGAL', links: [{ label: 'Terms', section: 'terms' }, { label: 'Privacy', section: 'privacy' }] },
-  { title: 'SUPPORT', links: [{ label: 'Partners', section: 'partners' }, { label: 'Help', section: 'help' }] },
+  { title: 'LEGAL', links: [{ label: 'Terms', section: 'terms' }, { label: 'Privacy', section: 'privacy' }, { label: 'Contact', section: 'contact' }] },
+  { title: 'SUPPORT', links: [{ label: 'Partners', section: 'partners' }, { label: 'Help', section: 'help' }, { label: 'Community Guidelines', section: 'community-guidelines' }] },
 ];
-
-const footerBottomLinks = [
-  { label: 'Contact', section: 'contact' },
-  { label: 'Community Guidelines', section: 'community-guidelines' },
-] as const;
 
 const s = StyleSheet.create({
   safe: { flex: 1, minHeight: 0, backgroundColor: Signal.paper },
@@ -142,14 +135,16 @@ const s = StyleSheet.create({
   formalFooterWordmark: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 20, lineHeight: 24, fontWeight: '900', letterSpacing: 5 },
   formalFooterAboutHit: { alignSelf: 'flex-start', marginTop: 9 },
   formalFooterAbout: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 20, lineHeight: 26 },
+  formalFooterAboutLink: { fontStyle: 'italic', textDecorationLine: 'underline' },
   formalFooterDescription: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 18, marginTop: 2 },
   formalFooterGroups: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12, marginTop: 16 },
   formalFooterGroup: { minWidth: 0, gap: 2, paddingRight: 12 },
   formalFooterGroupWide: { width: '25%' },
   formalFooterGroupMobile: { width: '50%' },
   formalFooterGroupTitle: { color: Signal.forest, fontFamily: SignalFonts.sans, fontSize: 10, lineHeight: 15, fontWeight: '700', letterSpacing: 0.7, marginBottom: 3 },
-  formalFooterLinkCell: { minHeight: 27, justifyContent: 'center' },
-  formalFooterLink: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 17, fontWeight: '600' },
-  formalFooterBottomLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 24, rowGap: 4, marginTop: 8 },
-  formalFooterBottomLinkCell: { minHeight: 27, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  formalFooterLinkCell: { minHeight: 27, justifyContent: 'center', alignSelf: 'stretch' },
+  formalFooterLink: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 12, lineHeight: 17, fontWeight: '600', fontStyle: 'italic', textDecorationLine: 'underline' },
+  formalFooterPlaceholder: { color: Signal.inkSoft, fontStyle: 'normal', textDecorationLine: 'none' },
+  formalFooterLinkFocused: { fontWeight: '700' },
+  formalFooterLinkFocus: { borderWidth: 1, borderColor: Signal.ink, borderRadius: 2, paddingHorizontal: 4 },
 });

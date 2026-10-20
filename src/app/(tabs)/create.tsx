@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/auth-context';
 import { Palette as C, MaxContentWidth, Spacing } from '@/constants/theme';
 import { clearCampaignDraft, readCampaignDraft, readCampaignSubmission, readCampaignSubmissions, writeCampaignDraft, writeCampaignSubmission } from '@/data/campaign-draft-storage';
-import { isSignalApiConfigured, listCampaignDraftsFromApi, saveCampaignDraftToApi, syncCampaignSubmissionToApi } from '@/data/signal-api';
+import { isSignalApiConfigured, listCampaignDraftsFromApi, saveCampaignDraftToApi, suggestCampaignFieldsFromAi, syncCampaignSubmissionToApi, type CampaignAiSuggestions } from '@/data/signal-api';
 import { recordLocalCampaignSubmission } from '@/data/local-activity';
 import { useWebScrollDiagnostics } from '@/hooks/use-web-scroll-diagnostics';
 import { DEMO_REACH_PER_DOLLAR, normalizeLocalCampaignDraft, type LocalCampaignDraft, type LocalSource, type LocalStorySection } from '@/types/local-campaign';
@@ -98,6 +98,10 @@ export default function CreateScreen() {
   const [hasDraft, setHasDraft] = useState(false);
   const [entryNotice, setEntryNotice] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
+  const [aiIdea, setAiIdea] = useState('');
+  const [aiSuggestions, setAiSuggestions] = useState<CampaignAiSuggestions | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
@@ -196,13 +200,50 @@ export default function CreateScreen() {
   const allocated = useMemo(() => money(draft.instagramBudget) + money(draft.facebookBudget), [draft.facebookBudget, draft.instagramBudget]);
   const estimatedReach = Math.round(allocated * DEMO_REACH_PER_DOLLAR);
 
-  function openFlow(method: 'manual' | 'voice') {
-    setEntryNotice(method === 'voice'
-      ? 'Voice transcription and AI are not configured yet. Continue with this editable manual draft; you can enter or paste your story below.'
+  function openFlow(suggestions?: CampaignAiSuggestions) {
+    setEntryNotice(suggestions
+      ? 'AI suggestions are now in your editable campaign draft. Review and change each field before continuing.'
       : 'Your draft saves on this device as you work.');
-    setDraft((current) => ({ ...(hasDraft ? current : newDraft()), currentStep: 1, localStatus: 'draft' }));
+    setDraft((current) => {
+      const base = hasDraft ? current : newDraft();
+      if (!suggestions) return { ...base, currentStep: 1, localStatus: 'draft' };
+      return {
+        ...base,
+        title: suggestions.title,
+        summary: suggestions.story.slice(0, 500),
+        storyHeadline: suggestions.title,
+        introduction: suggestions.story,
+        sections: [{ id: `ai-story-${Date.now()}`, heading: 'Why this matters', body: suggestions.story }],
+        adHeadline: suggestions.title,
+        adDescription: suggestions.message,
+        currentStep: 1,
+        localStatus: 'draft',
+      };
+    });
     setFlowStarted(true);
     setErrors([]);
+  }
+
+  async function makeWithAi() {
+    if (!session?.access_token) {
+      setAiError('Sign in to use AI-assisted campaign suggestions.');
+      return;
+    }
+    const idea = aiIdea.trim();
+    if (idea.length < 10) {
+      setAiError('Describe your campaign idea in at least 10 characters.');
+      return;
+    }
+    setAiLoading(true);
+    setAiError('');
+    setAiSuggestions(null);
+    try {
+      setAiSuggestions(await suggestCampaignFieldsFromAi(idea, session.access_token));
+    } catch (error) {
+      setAiError(error instanceof Error ? error.message : 'AI suggestions could not be created. Try again.');
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   function resumeDraft() {
@@ -325,7 +366,7 @@ export default function CreateScreen() {
     setDraft(fresh);
     setHasDraft(false);
     setFlowStarted(false);
-    setEntryNotice('New editable draft. Voice and AI services are not configured.');
+    setEntryNotice('New editable campaign draft.');
   }
 
   const updateSection = (id: string, patch: Partial<LocalStorySection>) => patchDraft({ sections: draft.sections.map((item) => item.id === id ? { ...item, ...patch } : item) });
@@ -342,8 +383,15 @@ export default function CreateScreen() {
             hasDraft={hasDraft}
             draft={draft}
             notice={entryNotice}
-            onManual={() => openFlow('manual')}
-            onVoice={() => openFlow('voice')}
+            aiIdea={aiIdea}
+            aiSuggestions={aiSuggestions}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            onAiIdeaChange={(value) => { setAiIdea(value); setAiError(''); }}
+            onAiSuggestionsChange={(suggestions) => setAiSuggestions(suggestions)}
+            onMakeWithAi={() => { void makeWithAi(); }}
+            onManual={openFlow}
+            onContinueWithAi={() => aiSuggestions && openFlow(aiSuggestions)}
             onResume={resumeDraft}
             onViewDraft={() => router.push({ pathname: '/campaign/[id]', params: { id: `local-${draft.id}` } } as never)}
             onNewDraft={() => { void startNewDraft(); }}
@@ -384,18 +432,32 @@ export default function CreateScreen() {
   </SafeAreaView>;
 }
 
-function EntryScreen({ hasDraft, draft, notice, onManual, onVoice, onResume, onViewDraft, onNewDraft }: {
-  hasDraft: boolean; draft: LocalCampaignDraft; notice: string; onManual: () => void; onVoice: () => void; onResume: () => void; onViewDraft: () => void; onNewDraft: () => void;
+function EntryScreen({ hasDraft, draft, notice, aiIdea, aiSuggestions, aiLoading, aiError, onAiIdeaChange, onAiSuggestionsChange, onMakeWithAi, onManual, onContinueWithAi, onResume, onViewDraft, onNewDraft }: {
+  hasDraft: boolean; draft: LocalCampaignDraft; notice: string; aiIdea: string; aiSuggestions: CampaignAiSuggestions | null; aiLoading: boolean; aiError: string;
+  onAiIdeaChange: (value: string) => void; onAiSuggestionsChange: (value: CampaignAiSuggestions) => void; onMakeWithAi: () => void; onManual: () => void; onContinueWithAi: () => void; onResume: () => void; onViewDraft: () => void; onNewDraft: () => void;
 }) {
   return <View style={styles.entry}>
-    <Text style={styles.entryEyebrow}>MAKE YOUR MESSAGE TRAVEL</Text>
-    <Text style={styles.entryTitle}>Start a campaign</Text>
-    <Text style={styles.body}>Build a clear story, choose who should see it, and prepare it for review.</Text>
+    <Text style={styles.entryTitle}>Start Your Campaign</Text>
+    <Text style={styles.body}>Describe your message and why it matters, choose the audience and distribution platforms you want to reach, then submit your campaign for review.</Text>
     <View style={styles.entryOptions}>
       <ActionButton label="Create Manually" onPress={onManual} />
-      <ActionButton label="Create with Your Voice" kind="secondary" onPress={onVoice} />
     </View>
-    <Text style={styles.helper}>Voice recognition and AI writing are not connected. The voice option opens the same editable draft so you can type or paste your content.</Text>
+    <View style={styles.aiEntry}>
+      <Text style={styles.sectionEyebrow}>CAMPAIGN WRITING ASSIST</Text>
+      <Text style={styles.helper}>Describe your starting idea. AI suggestions are optional and must be reviewed and edited before you continue.</Text>
+      <Field label="Initial campaign idea" value={aiIdea} onChangeText={onAiIdeaChange} placeholder="What message would you like more people to understand?" multiline maxLength={2000} />
+      <ActionButton label={aiLoading ? 'Making suggestions…' : 'Make with AI'} kind="secondary" disabled={aiLoading} onPress={onMakeWithAi} />
+      {aiLoading ? <View style={styles.aiLoading}><ActivityIndicator size="small" color={C.red} /><Text style={styles.helper}>Asking the configured AI service for editable suggestions…</Text></View> : null}
+      {aiError ? <Text accessibilityRole="alert" style={styles.aiError}>{aiError}</Text> : null}
+      {aiSuggestions ? <View style={styles.aiSuggestions}>
+        <Text style={styles.aiSuccessTitle}>Suggestions ready · review and edit</Text>
+        <Field label="Suggested campaign title" value={aiSuggestions.title} onChangeText={(title) => onAiSuggestionsChange({ ...aiSuggestions, title })} maxLength={60} />
+        <Field label="Suggested story" value={aiSuggestions.story} onChangeText={(story) => onAiSuggestionsChange({ ...aiSuggestions, story })} multiline maxLength={6000} />
+        <Field label="Suggested distribution message" value={aiSuggestions.message} onChangeText={(message) => onAiSuggestionsChange({ ...aiSuggestions, message })} multiline maxLength={500} />
+        <Text style={styles.helper}>These suggestions are not submitted or published. You can edit them in the campaign form before using the existing review and submission steps.</Text>
+        <ActionButton label="Continue with these suggestions" onPress={onContinueWithAi} />
+      </View> : null}
+    </View>
     {notice ? <Text style={styles.notice}>{notice}</Text> : null}
     {hasDraft ? <View style={styles.resumeBox}>
       <Text style={styles.sectionEyebrow}>SAVED ON THIS DEVICE</Text>
@@ -415,7 +477,7 @@ function StepBasics({ draft, patchDraft }: { draft: LocalCampaignDraft; patchDra
     <Field label="Short summary" value={draft.summary} onChangeText={(summary) => patchDraft({ summary })} placeholder="Describe the campaign in a few sentences" multiline maxLength={500} />
     <Field label="Cover image reference (optional)" value={draft.coverUri} onChangeText={(coverUri) => patchDraft({ coverUri })} placeholder="https://…/image.jpg or local URI" helper="Draft metadata only. This screen does not upload files. Supported references end in JPG, PNG, or WebP." error={draft.coverUri && !validImageReference(draft.coverUri) ? 'Use a JPG, PNG, or WebP image reference.' : undefined} />
     {draft.coverUri ? <Field label="Cover image alt text" value={draft.coverAlt} onChangeText={(coverAlt) => patchDraft({ coverAlt })} placeholder="Briefly describe the image" maxLength={500} /> : null}
-    <Text style={styles.unavailable}>AI title and summary suggestions are unavailable until an AI service is configured.</Text>
+    <Text style={styles.helper}>AI-generated text is only a draft. Review every detail for accuracy before submitting for review.</Text>
   </StepPanel>;
 }
 
@@ -677,6 +739,11 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.4 },
   pressed: { opacity: 0.75 },
   entry: { gap: 16, paddingTop: 12 },
+  aiEntry: { backgroundColor: C.surface, borderRadius: 13, padding: 16, gap: 12 },
+  aiLoading: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  aiError: { color: C.error, fontSize: 12, lineHeight: 18 },
+  aiSuggestions: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12, gap: 12 },
+  aiSuccessTitle: { color: C.green, fontSize: 14, fontWeight: '700' },
   entryEyebrow: { color: C.brown, fontSize: 11, letterSpacing: 1.8, fontWeight: '800' },
   entryTitle: { color: C.text, fontSize: 34, lineHeight: 40, fontWeight: '700' },
   entryOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

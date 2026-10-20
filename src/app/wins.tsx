@@ -18,7 +18,7 @@ export default function WinsScreen() {
             <Text style={styles.backText}>‹  Home</Text>
           </Pressable>
           <Text accessibilityRole="header" style={styles.title}>Discover the Wins</Text>
-          <Text style={styles.intro}>Campaigns listed as completed in the SIGNAL catalogue.</Text>
+          <Text style={styles.intro}>Explore campaigns that have reached completion, discover the stories behind them, and see the progress and outcomes they&apos;ve shared.</Text>
 
           {completedCampaigns.length ? completedCampaigns.map((campaign) => (
             <Pressable

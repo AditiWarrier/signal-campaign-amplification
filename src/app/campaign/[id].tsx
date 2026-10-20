@@ -138,28 +138,29 @@ function CampaignFeedback() {
   };
 
   return <View style={styles.feedbackSection}>
-    <Text accessibilityRole="header" style={styles.feedbackTitle}>We&apos;d Love Your Thoughts</Text>
-    <Text style={styles.feedbackCopy}>Your feedback helps us understand how this campaign communicates its message.</Text>
-    <FeedbackQuestion
-      question="Did the visuals encourage you to continue reading?"
-      value={visualsAnswer}
-      onChange={updateVisualsAnswer}
-    />
-    <FeedbackQuestion
-      question="Did the campaign message change your mind?"
-      value={messageAnswer}
-      onChange={updateMessageAnswer}
-    />
-    <Pressable accessibilityRole="button" onPress={() => setSubmitted(true)} style={({ pressed }) => [styles.feedbackSubmit, pressed && styles.pressed]}>
-      <Text style={styles.feedbackSubmitText}>Submit Feedback</Text>
-    </Pressable>
-    {submitted ? <View style={styles.feedbackConfirmation}>
-      <View style={styles.feedbackConfirmationHeading}>
-        <View style={styles.feedbackConfirmationIcon}><Text style={styles.feedbackConfirmationCheck}>✓</Text></View>
-        <Text accessibilityLiveRegion="polite" style={styles.feedbackConfirmationTitle}>Feedback submitted</Text>
+    {submitted ? <View style={styles.feedbackSuccess} accessibilityLiveRegion="polite">
+      <View style={styles.feedbackSuccessIcon} accessibilityLabel="Success">
+        <Text style={styles.feedbackSuccessCheck}>✓</Text>
       </View>
-      <Text style={styles.feedbackConfirmationCopy}>This is a demo interaction. Your feedback isn&apos;t sent to or stored by SIGNAL.</Text>
-    </View> : null}
+      <Text accessibilityRole="header" style={styles.feedbackSuccessTitle}>Feedback submitted</Text>
+      <Text style={styles.feedbackSuccessCopy}>This is a demo interaction. Your feedback isn&apos;t sent to or stored by SIGNAL.</Text>
+    </View> : <>
+      <Text accessibilityRole="header" style={styles.feedbackTitle}>We&apos;d Love Your Thoughts</Text>
+      <Text style={styles.feedbackCopy}>Your feedback helps us understand how this campaign communicates its message.</Text>
+      <FeedbackQuestion
+        question="Did the visuals encourage you to continue reading?"
+        value={visualsAnswer}
+        onChange={updateVisualsAnswer}
+      />
+      <FeedbackQuestion
+        question="Did the campaign message change your mind?"
+        value={messageAnswer}
+        onChange={updateMessageAnswer}
+      />
+      <Pressable accessibilityRole="button" onPress={() => setSubmitted(true)} style={({ pressed }) => [styles.feedbackSubmit, pressed && styles.pressed]}>
+        <Text style={styles.feedbackSubmitText}>Submit Feedback</Text>
+      </Pressable>
+    </>}
   </View>;
 }
 
@@ -633,12 +634,11 @@ const styles = StyleSheet.create({
   feedbackOptionTextSelected: { color: C.paper },
   feedbackSubmit: { minHeight: 40, alignSelf: 'flex-start', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderRadius: 20, backgroundColor: C.green, marginTop: 2 },
   feedbackSubmitText: { color: C.paper, fontSize: 12, fontWeight: '700' },
-  feedbackConfirmation: { gap: 3, padding: 10, borderRadius: 6, backgroundColor: C.maroonLight },
-  feedbackConfirmationHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  feedbackConfirmationIcon: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: C.green },
-  feedbackConfirmationCheck: { color: C.paper, fontSize: 15, lineHeight: 18, fontWeight: '800' },
-  feedbackConfirmationTitle: { color: C.maroon, fontSize: 13, lineHeight: 18, fontWeight: '700' },
-  feedbackConfirmationCopy: { color: C.text, fontSize: 11, lineHeight: 17 },
+  feedbackSuccess: { alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 8 },
+  feedbackSuccessIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: C.backgroundSelected, borderWidth: 1, borderColor: C.green },
+  feedbackSuccessCheck: { color: C.green, fontSize: 25, lineHeight: 30, fontWeight: '800' },
+  feedbackSuccessTitle: { color: C.text, fontSize: 16, lineHeight: 21, fontWeight: '700', textAlign: 'center' },
+  feedbackSuccessCopy: { color: C.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
   sectionTitle: { color: C.text, fontSize: 23, lineHeight: 30, fontWeight: '600', letterSpacing: -0.2, marginTop: 5, marginBottom: 12 },
   progressSection: { marginTop: 0, marginBottom: 28 },
   progressPanel: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.line, borderRadius: 9, padding: 16, gap: 12 },

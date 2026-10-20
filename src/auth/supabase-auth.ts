@@ -3,7 +3,27 @@ import { sessionStorage } from './session-storage';
 export type AuthUser = {
   id: string;
   email: string;
-  user_metadata?: { full_name?: string; name?: string };
+  user_metadata?: {
+    full_name?: string;
+    name?: string;
+    location?: string;
+    interests?: string[];
+    about_me?: string;
+    age?: number | null;
+    gender?: string;
+    occupation?: string;
+    [key: string]: unknown;
+  };
+};
+
+export type AuthProfileFields = {
+  full_name: string;
+  location: string;
+  interests: string[];
+  about_me: string;
+  age: number | null;
+  gender: string;
+  occupation: string;
 };
 
 export type AuthSession = {
@@ -116,14 +136,21 @@ function toSession(response: TokenResponse): AuthSession {
       id: response.user.id,
       email: response.user.email,
       user_metadata: {
+        ...response.user.user_metadata,
         full_name: response.user.user_metadata?.full_name,
         name: response.user.user_metadata?.name,
+        location: response.user.user_metadata?.location,
+        interests: response.user.user_metadata?.interests,
+        about_me: response.user.user_metadata?.about_me,
+        age: response.user.user_metadata?.age,
+        gender: response.user.user_metadata?.gender,
+        occupation: response.user.user_metadata?.occupation,
       },
     },
   };
 }
 
-async function saveSession(session: AuthSession): Promise<AuthSession> {
+export async function saveSession(session: AuthSession): Promise<AuthSession> {
   await sessionStorage.write(JSON.stringify(session));
   return session;
 }
@@ -137,17 +164,36 @@ export async function signInWithPassword(email: string, password: string): Promi
   return saveSession(toSession(response));
 }
 
-export async function registerWithPassword(name: string, email: string, password: string): Promise<AuthResponse> {
+export async function registerWithPassword(name: string, email: string, password: string, profile: Omit<AuthProfileFields, 'full_name'> = { location: '', interests: [], about_me: '', age: null, gender: '', occupation: '' }): Promise<AuthResponse> {
   const response = await request<TokenResponse & { session?: TokenResponse | null }>('signup', {
     email,
     password,
-    data: { full_name: name },
+    data: { full_name: name, ...profile },
   });
   const tokenResponse = response.session ?? (response.access_token ? response : null);
   if (!tokenResponse?.access_token || !tokenResponse.refresh_token) {
     return { session: null, confirmationRequired: true };
   }
   return { session: await saveSession(toSession(tokenResponse)), confirmationRequired: false };
+}
+
+export async function updateUserProfile(session: AuthSession, fields: AuthProfileFields): Promise<AuthSession> {
+  const metadata = { ...session.user.user_metadata, ...fields };
+  const user = await request<AuthUser>('user', { data: metadata }, session.access_token);
+  if (!user || typeof user.id !== 'string' || typeof user.email !== 'string') {
+    throw new AuthRequestError(502, 'INVALID_PROFILE_RESPONSE', 'The profile service returned an invalid account record.');
+  }
+  if (user.id !== session.user.id) {
+    throw new AuthRequestError(401, 'PROFILE_USER_MISMATCH', 'The returned profile does not match the signed-in account.');
+  }
+  return {
+    ...session,
+    user: {
+      ...session.user,
+      ...user,
+      user_metadata: { ...metadata, ...user.user_metadata },
+    },
+  };
 }
 
 async function refresh(session: AuthSession): Promise<AuthSession> {

@@ -98,7 +98,7 @@ export default function InformationScreen() {
           <Text accessibilityRole="header" nativeID="about-heading" style={styles.sectionTitle}>ABOUT SIGNAL</Text>
         </View>
 
-        <FeatureBand />
+        <AboutFeatures />
 
         <View style={styles.aboutCopyColumn}>
           <Text style={styles.sectionCopy}>{informationSections[0].paragraphs[0]}</Text>
@@ -120,30 +120,40 @@ export default function InformationScreen() {
             ))}
           </View>
         ))}
+        <View style={styles.taglineWrap}>
+          <Text style={styles.tagline}>Small signals. Wider circles.</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function FeatureBand() {
+function AboutFeatures() {
   return (
-    <View style={styles.featureBand}>
-      <View style={styles.featureBandInner}>
-        <View accessible accessibilityLabel="Report chart illustration. Transparent Amplification." style={styles.featureItem}>
+    <View>
+      <View style={[styles.featureSection, styles.reportSection]}>
+        <View accessible accessibilityLabel="Illustration of a report showing distribution progress" style={styles.featureContent}>
           <View style={styles.illustrationFrame}>
             <View style={styles.reportPage}>
               <View style={styles.reportHeadingLine} />
+              <View style={styles.reportLine} />
               <View style={styles.reportChart}>
                 <View style={styles.reportBarShort} />
                 <View style={styles.reportBarMedium} />
                 <View style={styles.reportBarTall} />
+                <View style={styles.reportBarMedium} />
               </View>
             </View>
           </View>
-          <Text style={styles.featureLabel}>Transparent Amplification</Text>
+          <View style={styles.featureCopy}>
+            <Text accessibilityRole="header" style={styles.featureTitle}>Transparent Amplification</Text>
+            <Text style={styles.featureDescription}>Understand what campaign funding supports and how distribution progress is reported.</Text>
+          </View>
         </View>
+      </View>
 
-        <View accessible accessibilityLabel="Megaphone illustration. Wider Reach." style={styles.featureItem}>
+      <View style={[styles.featureSection, styles.reachSection]}>
+        <View accessible accessibilityLabel="Illustration of a megaphone" style={styles.featureContent}>
           <View style={styles.illustrationFrame}>
             <View style={styles.megaphone}>
               <View style={styles.megaphoneGrip} />
@@ -153,12 +163,21 @@ function FeatureBand() {
               <View style={styles.megaphoneWaveLarge} />
             </View>
           </View>
-          <Text style={styles.featureLabel}>Wider Reach</Text>
+          <View style={styles.featureCopy}>
+            <Text accessibilityRole="header" style={styles.featureTitle}>Wider Reach</Text>
+            <Text style={styles.featureDescription}>Help meaningful campaign messages reach audiences beyond their existing networks.</Text>
+          </View>
         </View>
+      </View>
 
-        <View accessible accessibilityLabel="Community people illustration. Impact Creation." style={styles.featureItem}>
+      <View style={[styles.featureSection, styles.impactSection]}>
+        <View accessible accessibilityLabel="Illustration of a community group" style={styles.featureContent}>
           <View style={[styles.illustrationFrame, styles.peopleIllustration]}>
             <View style={styles.personSide}>
+              <View style={styles.personHead} />
+              <View style={styles.personBody} />
+            </View>
+            <View style={[styles.personSide, styles.personTall]}>
               <View style={styles.personHead} />
               <View style={styles.personBody} />
             </View>
@@ -166,12 +185,19 @@ function FeatureBand() {
               <View style={[styles.personHead, styles.personHeadCenter]} />
               <View style={[styles.personBody, styles.personBodyCenter]} />
             </View>
+            <View style={[styles.personSide, styles.personTall]}>
+              <View style={styles.personHead} />
+              <View style={styles.personBody} />
+            </View>
             <View style={styles.personSide}>
               <View style={styles.personHead} />
               <View style={styles.personBody} />
             </View>
           </View>
-          <Text style={styles.featureLabel}>Impact Creation</Text>
+          <View style={styles.featureCopy}>
+            <Text accessibilityRole="header" style={styles.featureTitle}>Impact Creation</Text>
+            <Text style={styles.featureDescription}>Bring people together to help important messages reach more people.</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -191,28 +217,36 @@ const styles = StyleSheet.create({
   sectionTitle: { color: Signal.maroon, fontFamily: SignalFonts.sans, fontSize: 15, lineHeight: 21, fontWeight: '700', letterSpacing: 1.1, marginBottom: 8 },
   sectionCopy: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 22 },
   followingParagraph: { marginTop: 10 },
-  featureBand: { width: '100%', backgroundColor: '#000000', paddingVertical: 18 },
-  featureBandInner: { width: '100%', maxWidth: 680, alignSelf: 'center', flexDirection: 'row', paddingHorizontal: 14 },
-  featureItem: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'flex-start', gap: 8 },
-  illustrationFrame: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  featureLabel: { width: '100%', color: '#FFFFFF', fontFamily: SignalFonts.sans, fontSize: 11, lineHeight: 15, fontWeight: '600', textAlign: 'center' },
-  reportPage: { width: 34, height: 40, borderWidth: 1.5, borderColor: Signal.paper, borderRadius: 3, paddingHorizontal: 4, paddingTop: 5, paddingBottom: 4 },
-  reportHeadingLine: { width: '70%', height: 2, backgroundColor: Signal.paper, marginBottom: 5 },
-  reportChart: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', borderBottomWidth: 1, borderBottomColor: Signal.paper },
-  reportBarShort: { width: 4, height: 7, backgroundColor: Signal.oliveLight },
-  reportBarMedium: { width: 4, height: 12, backgroundColor: Signal.maroonLight },
-  reportBarTall: { width: 4, height: 18, backgroundColor: Signal.oliveLight },
-  megaphone: { width: 44, height: 38, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  megaphoneGrip: { width: 5, height: 12, borderWidth: 1.5, borderColor: Signal.paper, borderRightWidth: 0, borderTopLeftRadius: 3, borderBottomLeftRadius: 3 },
-  megaphoneCone: { width: 0, height: 0, borderTopWidth: 13, borderBottomWidth: 13, borderLeftWidth: 24, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: Signal.paper },
-  megaphoneHandle: { position: 'absolute', width: 5, height: 9, left: 14, top: 25, borderWidth: 1.5, borderColor: Signal.paper, borderTopWidth: 0, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
-  megaphoneWaveSmall: { width: 6, height: 12, marginLeft: 2, borderRightWidth: 1.5, borderColor: Signal.oliveLight, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 8 },
-  megaphoneWaveLarge: { position: 'absolute', right: -1, width: 10, height: 21, borderRightWidth: 1.5, borderColor: Signal.oliveLight, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 12 },
-  peopleIllustration: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  personSide: { width: 12, alignItems: 'center', gap: 3 },
-  personHead: { width: 8, height: 8, borderRadius: 4, backgroundColor: Signal.paper },
-  personBody: { width: 12, height: 14, borderWidth: 1.5, borderColor: Signal.paper, borderTopLeftRadius: 7, borderTopRightRadius: 7, borderBottomWidth: 0 },
-  personCenter: { width: 14 },
-  personHeadCenter: { width: 10, height: 10, borderRadius: 5, backgroundColor: Signal.oliveLight },
-  personBodyCenter: { width: 14, height: 16, borderColor: Signal.oliveLight, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
+  featureSection: { width: '100%', paddingHorizontal: 22, paddingVertical: 25 },
+  reportSection: { backgroundColor: Signal.paperDeep },
+  reachSection: { backgroundColor: Signal.paper },
+  impactSection: { backgroundColor: Signal.maroonLight },
+  featureContent: { width: '100%', maxWidth: 680, alignSelf: 'center', alignItems: 'center' },
+  illustrationFrame: { width: '100%', height: 150, alignItems: 'center', justifyContent: 'center' },
+  featureCopy: { width: '100%', maxWidth: 520, alignItems: 'center', marginTop: 9 },
+  featureTitle: { color: Signal.maroon, fontFamily: SignalFonts.sans, fontSize: 21, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
+  featureDescription: { color: Signal.ink, fontFamily: SignalFonts.sans, fontSize: 14, lineHeight: 22, textAlign: 'center', marginTop: 6 },
+  reportPage: { width: 98, height: 122, borderWidth: 2, borderColor: Signal.forest, borderRadius: 7, backgroundColor: Signal.paper, paddingHorizontal: 11, paddingTop: 12, paddingBottom: 10 },
+  reportHeadingLine: { width: '68%', height: 4, borderRadius: 2, backgroundColor: Signal.maroon, marginBottom: 8 },
+  reportLine: { width: '88%', height: 3, borderRadius: 2, backgroundColor: Signal.forest, opacity: 0.45, marginBottom: 8 },
+  reportChart: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', borderBottomWidth: 2, borderBottomColor: Signal.forest },
+  reportBarShort: { width: 10, height: 19, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.forest },
+  reportBarMedium: { width: 10, height: 33, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.maroon },
+  reportBarTall: { width: 10, height: 48, borderTopLeftRadius: 3, borderTopRightRadius: 3, backgroundColor: Signal.forest },
+  megaphone: { width: 166, height: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  megaphoneGrip: { width: 14, height: 40, borderWidth: 4, borderColor: Signal.maroon, borderRightWidth: 0, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  megaphoneCone: { width: 0, height: 0, borderTopWidth: 42, borderBottomWidth: 42, borderLeftWidth: 76, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: Signal.forest },
+  megaphoneHandle: { position: 'absolute', width: 18, height: 31, left: 43, top: 65, borderWidth: 4, borderColor: Signal.maroon, borderTopWidth: 0, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 },
+  megaphoneWaveSmall: { width: 12, height: 30, marginLeft: 7, borderRightWidth: 4, borderColor: Signal.maroon, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 16 },
+  megaphoneWaveLarge: { position: 'absolute', right: -2, width: 20, height: 54, borderRightWidth: 4, borderColor: Signal.maroon, borderLeftColor: 'transparent', borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRadius: 24 },
+  peopleIllustration: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 7 },
+  personSide: { width: 28, alignItems: 'center', gap: 7 },
+  personTall: { marginBottom: 8 },
+  personHead: { width: 22, height: 22, borderRadius: 11, backgroundColor: Signal.forest },
+  personBody: { width: 30, height: 44, borderWidth: 4, borderColor: Signal.forest, borderTopLeftRadius: 15, borderTopRightRadius: 15, borderBottomWidth: 0 },
+  personCenter: { width: 34 },
+  personHeadCenter: { width: 28, height: 28, borderRadius: 14, backgroundColor: Signal.maroon },
+  personBodyCenter: { width: 40, height: 56, borderColor: Signal.maroon, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  taglineWrap: { width: '100%', alignItems: 'center', paddingHorizontal: 22, marginTop: 25, marginBottom: 4 },
+  tagline: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 13, lineHeight: 20, letterSpacing: 0.6, textAlign: 'center' },
 });

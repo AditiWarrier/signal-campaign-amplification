@@ -7,9 +7,12 @@ import {
   refreshSession,
   registerWithPassword,
   restoreSession,
+  saveSession,
   signInWithPassword,
   signOutSession,
+  updateUserProfile,
   AuthRequestError,
+  type AuthProfileFields,
   type AuthSession,
   type AuthUser,
 } from './supabase-auth';
@@ -20,7 +23,8 @@ type AuthContextValue = {
   session: AuthSession | null;
   user: AuthUser | null;
   signIn: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  register: (name: string, email: string, password: string, profile: Omit<AuthProfileFields, 'full_name'>) => Promise<boolean>;
+  updateProfile: (profile: AuthProfileFields) => Promise<void>;
   refreshAccessToken: (rejectedAccessToken?: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 };
@@ -112,13 +116,24 @@ export function AuthProvider({ children }: PropsWithChildren) {
       sessionRef.current = signedIn;
       setSession(signedIn);
     },
-    async register(name, email, password) {
-      const result = await registerWithPassword(name, email, password);
+    async register(name, email, password, profile) {
+      const result = await registerWithPassword(name, email, password, profile);
       if (result.session) {
         sessionRef.current = result.session;
         setSession(result.session);
       }
       return result.confirmationRequired;
+    },
+    async updateProfile(profile) {
+      const current = sessionRef.current;
+      if (!current) throw new Error('Sign in to edit your profile.');
+      const updated = await updateUserProfile(current, profile);
+      if (sessionRef.current?.user.id !== current.user.id || sessionRef.current.access_token !== current.access_token) {
+        throw new Error('Your sign-in session changed. Sign in again before saving profile changes.');
+      }
+      await saveSession(updated);
+      sessionRef.current = updated;
+      setSession(updated);
     },
     async refreshAccessToken(rejectedAccessToken) {
       const refreshed = await refreshCurrentSession(true, rejectedAccessToken);

@@ -16,6 +16,7 @@ export function PeoplePanel({ people }: { people: HomePerson[] }) {
       {/* overflow hidden keeps the scrolling row clipped to the panel so nothing crosses the off-white quarter */}
       <View style={s.panel}>
         <Text accessibilityRole="header" style={s.heading}>Meet the People Who Keep Change Moving Forward</Text>
+        <Text style={s.intro}>They didn&apos;t stop at one successful campaign. These changemakers are continuing to turn meaningful ideas into action and make a difference in their communities.</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -44,7 +45,8 @@ const s = StyleSheet.create({
   section: { flexDirection: 'row', width: '100%', marginTop: 64, backgroundColor: Signal.paper },
   leftSpace: { flex: 1 },
   panel: { flex: 3, minWidth: 0, overflow: 'hidden', backgroundColor: PEOPLE_SECTION_YELLOW, paddingTop: 36, paddingBottom: 32 },
-  heading: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 28, lineHeight: 34, paddingHorizontal: PANEL_PADDING, maxWidth: 420, marginBottom: 22 },
+  heading: { color: Signal.ink, fontFamily: SignalFonts.display, fontSize: 28, lineHeight: 34, paddingHorizontal: PANEL_PADDING, maxWidth: 420, marginBottom: 9 },
+  intro: { color: Signal.inkSoft, fontFamily: SignalFonts.sans, fontSize: 13, lineHeight: 19, paddingHorizontal: PANEL_PADDING, maxWidth: 480, marginBottom: 20 },
   scroll: { width: '100%', overflow: 'hidden' },
   row: { gap: 18, paddingHorizontal: PANEL_PADDING },
   person: { width: 112, alignItems: 'center' },

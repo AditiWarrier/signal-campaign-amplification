@@ -18,6 +18,9 @@ import { useAuth } from '@/auth/auth-context';
 import { Palette as C } from '@/constants/theme';
 
 type AuthMode = 'login' | 'register';
+const PROFILE_INTERESTS = ['Education', 'Environment', 'Community', 'Health', 'Accessibility', 'Arts & Culture'] as const;
+const PROFILE_GENDERS = ['Male', 'Female', 'Trans', 'Other'] as const;
+const PROFILE_OCCUPATIONS = ['Student', 'Employed', 'Self-employed', 'Unemployed', 'Other'] as const;
 
 function friendlyError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -25,11 +28,12 @@ function friendlyError(error: unknown): string {
 }
 
 function Field({ label, error, accessory, ...props }: TextInputProps & { label: string; error?: string; accessory?: ReactNode }) {
+  const multiline = props.multiline;
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={[styles.inputWrap, error && styles.inputError]}>
-        <TextInput {...props} style={[styles.input, props.style]} placeholderTextColor={C.placeholder} />
+      <View style={[styles.inputWrap, multiline && styles.multilineWrap, error && styles.inputError]}>
+        <TextInput {...props} style={[styles.input, multiline && styles.multilineInput, props.style]} placeholderTextColor={C.placeholder} />
         {accessory}
       </View>
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
@@ -41,6 +45,13 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
   const { configured, signIn, register } = useAuth();
   const registering = mode === 'register';
   const [name, setName] = useState('');
+  const [location, setLocation] = useState('');
+  const [interests, setInterests] = useState<string[]>([]);
+  const [aboutMe, setAboutMe] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState('');
+  const [occupation, setOccupation] = useState('');
+  const [customOccupation, setCustomOccupation] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -54,6 +65,10 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
   const validate = (): boolean => {
     const next: Record<string, string> = {};
     if (registering && name.trim().length < 2) next.name = 'Enter your name.';
+    if (registering && location.trim().length > 100) next.location = 'Keep your location to 100 characters or fewer.';
+    if (registering && aboutMe.trim().length > 280) next.aboutMe = 'Keep About me to 280 characters or fewer.';
+    if (registering && age.trim() && (!/^\d{1,3}$/.test(age.trim()) || Number(age) < 1 || Number(age) > 120)) next.age = 'Enter a whole age from 1 to 120.';
+    if (registering && customOccupation.trim().length > 80) next.occupation = 'Keep occupation to 80 characters or fewer.';
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) next.email = 'Enter a valid email address.';
     if (!password) next.password = 'Enter your password.';
     else if (registering && password.length < 8) next.password = 'Use at least 8 characters.';
@@ -73,7 +88,12 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
     setLoading(true);
     try {
       if (registering) {
-        const confirmationRequired = await register(name.trim(), email.trim().toLowerCase(), password);
+        const confirmationRequired = await register(name.trim(), email.trim().toLowerCase(), password, {
+          location: location.trim(), interests, about_me: aboutMe.trim(),
+          age: age.trim() ? Number(age.trim()) : null,
+          gender,
+          occupation: occupation === 'Other' ? customOccupation.trim() : occupation,
+        });
         if (confirmationRequired) {
           setNotice('Account created. Confirm your email using the message from Supabase, then return here to sign in.');
         } else {
@@ -115,7 +135,41 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
               </View>
             ) : null}
 
-            {registering ? <Field label="Name" value={name} onChangeText={setName} error={fieldErrors.name} placeholder="Your name" autoCapitalize="words" autoComplete="name" returnKeyType="next" /> : null}
+            {registering ? <>
+              <Field label="Name" value={name} onChangeText={setName} error={fieldErrors.name} placeholder="Your name" autoCapitalize="words" autoComplete="name" returnKeyType="next" />
+              <Field label="Location (optional)" value={location} onChangeText={setLocation} error={fieldErrors.location} placeholder="City or region" autoCapitalize="words" returnKeyType="next" />
+              <Field label="Age (optional)" value={age} onChangeText={setAge} error={fieldErrors.age} placeholder="Your age" keyboardType="number-pad" maxLength={3} />
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Gender (optional)</Text>
+                <View style={styles.interestOptions}>{PROFILE_GENDERS.map((option) => {
+                  const selected = gender === option;
+                  return <Pressable key={option} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => setGender((current) => current === option ? '' : option)} style={[styles.interestChip, selected && styles.interestChipSelected]}>
+                    <Text style={[styles.interestChipText, selected && styles.interestChipTextSelected]}>{option}</Text>
+                  </Pressable>;
+                })}</View>
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Occupation (optional)</Text>
+                <View style={styles.interestOptions}>{PROFILE_OCCUPATIONS.map((option) => {
+                  const selected = occupation === option;
+                  return <Pressable key={option} accessibilityRole="radio" accessibilityState={{ selected }} onPress={() => setOccupation((current) => current === option ? '' : option)} style={[styles.interestChip, selected && styles.interestChipSelected]}>
+                    <Text style={[styles.interestChipText, selected && styles.interestChipTextSelected]}>{option}</Text>
+                  </Pressable>;
+                })}</View>
+                {occupation === 'Other' ? <Field label="Your occupation (optional)" value={customOccupation} onChangeText={setCustomOccupation} error={fieldErrors.occupation} placeholder="Add your own" maxLength={80} /> : null}
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Interests (optional)</Text>
+                <Text style={styles.fieldHint}>Choose any topics you care about.</Text>
+                <View style={styles.interestOptions}>{PROFILE_INTERESTS.map((interest) => {
+                  const selected = interests.includes(interest);
+                  return <Pressable key={interest} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} onPress={() => setInterests((current) => selected ? current.filter((item) => item !== interest) : [...current, interest])} style={[styles.interestChip, selected && styles.interestChipSelected]}>
+                    <Text style={[styles.interestChipText, selected && styles.interestChipTextSelected]}>{interest}</Text>
+                  </Pressable>;
+                })}</View>
+              </View>
+              <Field label="About me (optional)" value={aboutMe} onChangeText={setAboutMe} error={fieldErrors.aboutMe} placeholder="A little about what you care about" multiline maxLength={280} />
+            </> : null}
             <Field label="Email" value={email} onChangeText={setEmail} error={fieldErrors.email} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="emailAddress" returnKeyType="next" />
             <Field
               label="Password"
@@ -182,16 +236,24 @@ const styles = StyleSheet.create({
   setupCopy: { color: C.muted, fontSize: 11, lineHeight: 17, marginTop: 5 },
   fieldGroup: { marginBottom: 15 },
   fieldLabel: { color: C.text, fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  fieldHint: { color: C.muted, fontSize: 11, lineHeight: 16, marginTop: -3, marginBottom: 7 },
   inputWrap: { minHeight: 48, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.line, borderRadius: 7, backgroundColor: C.surface, paddingHorizontal: 12 },
   inputError: { borderColor: C.red },
   input: { flex: 1, minWidth: 0, minHeight: 46, color: C.text, fontSize: 13, paddingVertical: 10 },
+  multilineWrap: { alignItems: 'stretch', paddingVertical: 3 },
+  multilineInput: { minHeight: 88, textAlignVertical: 'top' },
+  interestOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 3 },
+  interestChip: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 11, borderRadius: 18, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface },
+  interestChipSelected: { backgroundColor: C.green, borderColor: C.green },
+  interestChipText: { color: C.text, fontSize: 11, fontWeight: '600' },
+  interestChipTextSelected: { color: C.paper },
   visibilityButton: { paddingVertical: 10, paddingLeft: 10 },
   visibilityText: { color: C.text, fontSize: 11, fontWeight: '700' },
   fieldError: { color: C.red, fontSize: 10, marginTop: 5 },
   errorMessage: { color: C.red, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   successMessage: { color: C.green, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   submitButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: C.brown, borderRadius: 7, marginTop: 5 },
-  submitText: { color: C.espresso, fontSize: 13, fontWeight: '700' },
+  submitText: { color: C.paper, fontSize: 13, fontWeight: '700' },
   pressed: { opacity: 0.74 },
   switchRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 18 },
   switchCopy: { color: C.muted, fontSize: 11 },

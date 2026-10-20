@@ -6,6 +6,36 @@ export function isSignalApiConfigured(): boolean {
   return Boolean(API_BASE_URL);
 }
 
+export type CampaignAiSuggestions = { title: string; story: string; message: string };
+
+export async function suggestCampaignFieldsFromAi(idea: string, accessToken: string): Promise<CampaignAiSuggestions> {
+  if (!API_BASE_URL) throw new Error('AI suggestions need the SIGNAL API. Configure EXPO_PUBLIC_SIGNAL_API_URL and try again.');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/campaigns/ai-suggestions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea }),
+      signal: controller.signal,
+    });
+  } catch {
+    throw new Error('The SIGNAL AI service could not be reached. Check your connection and try again.');
+  } finally {
+    clearTimeout(timeout);
+  }
+  const result = await response.json().catch(() => null) as { error?: { message?: unknown }; suggestions?: unknown } | null;
+  if (!response.ok) {
+    throw new Error(typeof result?.error?.message === 'string' ? result.error.message : 'AI suggestions are unavailable right now.');
+  }
+  const suggestions = result?.suggestions as Partial<CampaignAiSuggestions> | undefined;
+  if (!suggestions || typeof suggestions.title !== 'string' || typeof suggestions.story !== 'string' || typeof suggestions.message !== 'string') {
+    throw new Error('The AI service returned suggestions that could not be read. Try again.');
+  }
+  return { title: suggestions.title, story: suggestions.story, message: suggestions.message };
+}
+
 export type SignalActivityEvent = {
   id: string;
   eventType: string;

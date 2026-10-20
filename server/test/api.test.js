@@ -163,7 +163,7 @@ test('Supabase Auth rejection becomes a classified INVALID_SESSION without expos
   assert.doesNotMatch(JSON.stringify(body), new RegExp(token));
 });
 
-async function withApi(t, store = new MemoryStore(), campaigns) {
+async function withApi(t, store = new MemoryStore(), campaigns, aiSuggestions) {
   const auth = {
     async verifyAccessToken(token) {
       const user = usersByToken[token];
@@ -173,7 +173,7 @@ async function withApi(t, store = new MemoryStore(), campaigns) {
     async signIn(email) { return { access_token: 'test-token', user: { email } }; },
     async signUp(name, email) { return { user: { name, email }, session: null }; },
   };
-  const server = createServer(createApp({ store, campaigns, auth }));
+  const server = createServer(createApp({ store, campaigns, auth, aiSuggestions }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
   t.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
@@ -188,6 +188,29 @@ async function withApi(t, store = new MemoryStore(), campaigns) {
   };
   return { request };
 }
+
+test('campaign AI suggestions require auth, validate the idea, and return editable suggestions', async (t) => {
+  let receivedIdea;
+  const { request } = await withApi(t, new MemoryStore(), undefined, async (idea) => {
+    receivedIdea = idea;
+    return { title: 'A clearer title', story: 'A draft story', message: 'A short message' };
+  });
+
+  assert.equal((await request('/api/campaigns/ai-suggestions', { method: 'POST', body: { idea: 'A meaningful idea' } })).status, 401);
+  const shortIdea = await request('/api/campaigns/ai-suggestions', { token: 'creator_token', method: 'POST', body: { idea: 'short' } });
+  assert.equal(shortIdea.status, 400);
+  const valid = await request('/api/campaigns/ai-suggestions', { token: 'creator_token', method: 'POST', body: { idea: 'A meaningful idea' } });
+  assert.equal(valid.status, 200);
+  assert.equal(receivedIdea, 'A meaningful idea');
+  assert.deepEqual(valid.data.suggestions, { title: 'A clearer title', story: 'A draft story', message: 'A short message' });
+});
+
+test('campaign AI suggestions report missing backend configuration honestly', async (t) => {
+  const { request } = await withApi(t);
+  const response = await request('/api/campaigns/ai-suggestions', { token: 'creator_token', method: 'POST', body: { idea: 'A meaningful idea' } });
+  assert.equal(response.status, 503);
+  assert.equal(response.data.error.code, 'AI_NOT_CONFIGURED');
+});
 
 test('Supabase campaign routes preserve ownership and return submitted account Activity', async (t) => {
   const saved = new Map();

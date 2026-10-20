@@ -100,7 +100,7 @@ export const discoveryCampaigns: DiscoveryCampaign[] = [
     keywords: ['lake', 'pollution', 'environment', 'Bengaluru'],
     coverColor: Signal.paperDeep,
     coverSymbol: '⌁',
-    image: require('../../assets/images/stories/lakeshore-care.jpg'),
+    image: require('../../assets/images/stories/lake-habitat.jpg'),
     featuredOnHome: true,
   },
   {
