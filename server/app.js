@@ -199,6 +199,7 @@ function createApp({ store, campaigns, auth, authMiddleware, authService, aiSugg
     return next();
   });
   app.use(express.json({ limit: MAX_JSON_BYTES, strict: true }));
+  app.get('/', (_req, res) => res.json({ ok: true, service: 'signal-api', message: 'SIGNAL API is running.' }));
   app.get('/api/health', (_req, res) => res.json({
     ok: true,
     service: 'signal-api',
